@@ -85,7 +85,7 @@ export async function fetchNewsSentiment(headline: string): Promise<{ sentiment:
 }
 
 export async function getNewsIntelligence(): Promise<NewsData> {
-  const dataSource = process.env.NEXT_PUBLIC_DATA_SOURCE || 'MOCK';
+  const dataSource = process.env.DATA_SOURCE || 'MOCK';
 
   if (dataSource === 'MOCK') {
     const mock = generateMockData();
@@ -168,3 +168,4 @@ export async function getNewsIntelligence(): Promise<NewsData> {
     return mock.news;
   }
 }
+

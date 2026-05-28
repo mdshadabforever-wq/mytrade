@@ -34,7 +34,7 @@ export interface MarketContextData {
 }
 
 export async function getMarketContext(): Promise<MarketContextData> {
-  const dataSource = process.env.NEXT_PUBLIC_DATA_SOURCE || 'MOCK';
+  const dataSource = process.env.DATA_SOURCE || 'MOCK';
 
   // Even if not in mock mode, mock data contains the full 50 stocks + 15 sectors.
   // We can merge real-time index levels with the detailed stock metrics for a hybrid layout.
@@ -143,3 +143,4 @@ export async function getMarketContext(): Promise<MarketContextData> {
     };
   }
 }
+

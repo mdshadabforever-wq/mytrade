@@ -64,7 +64,7 @@ export function calculateMaxPain(records: any[]): number {
 }
 
 export async function getOptionIntelligence(): Promise<OptionChainData> {
-  const dataSource = process.env.NEXT_PUBLIC_DATA_SOURCE || 'MOCK';
+  const dataSource = process.env.DATA_SOURCE || 'MOCK';
 
   if (dataSource === 'MOCK') {
     const mock = generateMockData();
@@ -160,3 +160,4 @@ export async function getOptionIntelligence(): Promise<OptionChainData> {
     return mock.optionChain;
   }
 }
+

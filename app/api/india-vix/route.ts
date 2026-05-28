@@ -3,7 +3,7 @@ import { fetchYFinanceQuote } from '@/lib/data-sources/yfinance-client';
 import { generateMockData } from '@/lib/data-sources/mock-data';
 
 export async function GET() {
-  const dataSource = process.env.NEXT_PUBLIC_DATA_SOURCE || 'MOCK';
+  const dataSource = process.env.DATA_SOURCE || 'MOCK';
 
   if (dataSource === 'MOCK') {
     const mock = generateMockData();
@@ -46,3 +46,4 @@ export async function GET() {
     return NextResponse.json(mock.vix);
   }
 }
+

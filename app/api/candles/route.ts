@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
   const interval = searchParams.get('interval') || '5'; // default 5 minutes
   const intervalNum = parseInt(interval);
 
-  const dataSource = process.env.NEXT_PUBLIC_DATA_SOURCE || 'MOCK';
+  const dataSource = process.env.DATA_SOURCE || 'MOCK';
 
   try {
     let candles: any[] = [];
@@ -51,3 +51,4 @@ export async function GET(request: NextRequest) {
     });
   }
 }
+
