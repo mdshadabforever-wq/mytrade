@@ -1,0 +1,501 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==========================================================
+   FUTURISTIC PREMIUM DARK INSTITUTIONAL TRADING TERMINAL
+   Bloomberg + TradingView + Linear + Vercel Inspired UI
+   ========================================================== */
+
+:root {
+  --bg-main: #060816;
+  --card-bg: #0b1220;
+  --card-secondary: #101a2e;
+  --primary: #3b82f6;
+  --cyan: #06b6d4;
+  --purple: #8b5cf6;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --border-glow: rgba(59, 130, 246, 0.18);
+
+  /* Typography */
+  --font-sans: var(--font-plus-jakarta-sans), sans-serif;
+  --font-mono: var(--font-jetbrains-mono), monospace;
+}
+
+body {
+  color: var(--text-primary) !important;
+  background: var(--bg-main) !important;
+  font-family: var(--font-sans) !important;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  
+  /* Futuristic dark layout details */
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.08) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.06) 0px, transparent 50%),
+    radial-gradient(at 50% 50%, rgba(6, 182, 212, 0.03) 0px, transparent 50%),
+    linear-gradient(rgba(255, 255, 255, 0.007) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.007) 1px, transparent 1px) !important;
+  background-size: 100% 100%, 100% 100%, 100% 100%, 28px 28px, 28px 28px !important;
+}
+
+/* Premium Minimal Scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-main);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--card-secondary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* ==========================================================
+   DARK SYSTEM INTERFACE COMPONENT OVERRIDES
+   ========================================================== */
+
+/* 1. Dashboard Body & HTML Canvas Backgrounds */
+.bg-\[\#030305\],
+.bg-\[\#050508\],
+.bg-\[\#030305\]\/85,
+.bg-\[\#050508\]\/85,
+html,
+body {
+  background-color: var(--bg-main) !important;
+}
+
+/* 2. Premium Crystalline Rounded Cards (18px) */
+.bg-\[\#0d1117\],
+.bg-\[\#0d1117\]\/60,
+.bg-\[\#0d1117\]\/80,
+.bg-\[\#0d1117\]\/85 {
+  background: linear-gradient(180deg, rgba(11, 18, 32, 0.95), rgba(6, 8, 22, 0.98)) !important;
+  border: 1px solid rgba(59, 130, 246, 0.15) !important;
+  border-radius: 18px !important;
+  box-shadow: 
+    0 0 0 1px rgba(255, 255, 255, 0.03), 
+    0 10px 30px rgba(0, 0, 0, 0.35), 
+    0 0 30px rgba(59, 130, 246, 0.08) !important;
+  backdrop-filter: blur(18px) !important;
+  position: relative !important;
+  overflow: hidden !important;
+  transition: all 0.25s ease !important;
+  padding: 18px !important; /* Consistent layout padding */
+}
+
+/* Hover elevation & advanced blue/purple outer glow */
+.bg-\[\#0d1117\]:hover,
+.bg-\[\#0d1117\]\/60:hover,
+.bg-\[\#0d1117\]\/80:hover {
+  border-color: rgba(139, 92, 246, 0.3) !important;
+  box-shadow: 
+    0 0 0 1px rgba(255, 255, 255, 0.05), 
+    0 15px 35px rgba(0, 0, 0, 0.45), 
+    0 0 40px rgba(139, 92, 246, 0.12) !important;
+  transform: translateY(-2px);
+}
+
+/* Modern Card Header Accents */
+.border-b.border-\[\#21262d\].pb-2.mb-3,
+.border-b.border-\[\#21262d\].pb-2.mb-2 {
+  background: rgba(16, 26, 46, 0.5) !important;
+  margin: -18px -18px 18px -18px !important;
+  padding: 14px 18px !important;
+  border-bottom: 1px solid rgba(59, 130, 246, 0.15) !important;
+  display: flex !important;
+  align-items: center !important;
+  position: relative !important;
+}
+
+/* Glowing electric cyan header accent bar on the left margin */
+.border-b.border-\[\#21262d\].pb-2.mb-3::before,
+.border-b.border-\[\#21262d\].pb-2.mb-2::before {
+  content: "" !important;
+  position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  width: 4px !important;
+  background-color: var(--cyan) !important;
+  box-shadow: 0 0 10px var(--cyan) !important;
+}
+
+/* 3. Floating Sidebar Panel */
+aside,
+.w-64.bg-\[\#0d1117\] {
+  background: linear-gradient(180deg, #050816 0%, #081225 100%) !important;
+  backdrop-filter: blur(20px) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
+  transition: all 0.25s ease !important;
+}
+
+/* 4. Sub-Widgets & Inner Panels */
+.bg-\[\#161b22\]\/40 {
+  background-color: var(--card-secondary) !important;
+  border-color: rgba(59, 130, 246, 0.15) !important;
+}
+
+.bg-\[\#050508\]\/40,
+.bg-\[\#050508\]\/50,
+.bg-\[\#050508\]\/55,
+.bg-\[\#050508\]\/85 {
+  background-color: var(--card-secondary) !important;
+  border: 1px solid rgba(59, 130, 246, 0.12) !important;
+  border-radius: 8px !important;
+}
+
+/* 5. Typography Scale & High-Contrast Readability */
+.text-\[\#e6e6e6\],
+.text-white,
+.text-slate-100 {
+  color: var(--text-primary) !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em !important;
+}
+
+.text-\[\#8892a4\],
+.text-slate-400 {
+  color: var(--text-secondary) !important;
+  font-weight: 500 !important;
+}
+
+/* Card numbers & primary headings size boost */
+.text-lg, .text-xl, .text-2xl, .text-3xl, .text-4xl {
+  color: var(--text-primary) !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.03em !important;
+}
+
+/* 6. Neon Accents & Signal Status Badges */
+.text-\[\#f0a500\],
+.text-yellow-400 {
+  color: var(--warning) !important;
+  font-weight: 700 !important;
+}
+
+.bg-\[\#f0a500\] {
+  background: var(--warning) !important;
+  color: #060816 !important;
+  font-weight: 800 !important;
+}
+
+.bg-\[\#f0a500\]\/10,
+.bg-\[\#f0a500\]\/20 {
+  background-color: rgba(245, 158, 11, 0.1) !important;
+  border: 1px solid rgba(245, 158, 11, 0.25) !important;
+  color: var(--warning) !important;
+  font-weight: 700 !important;
+}
+
+/* 🟢 Bullish Neon Success Green */
+.text-\[\#00e5a0\],
+.text-emerald-400 {
+  color: var(--success) !important;
+  font-weight: 700 !important;
+  text-shadow: 0 0 6px rgba(34, 197, 94, 0.2) !important;
+}
+
+.bg-\[\#00e5a0\]\/5,
+.bg-\[\#00e5a0\]\/10,
+.bg-\[\#00e5a0\]\/20 {
+  background-color: rgba(34, 197, 94, 0.1) !important;
+  border: 1px solid rgba(34, 197, 94, 0.25) !important;
+  color: var(--success) !important;
+  font-weight: 700 !important;
+}
+
+.bg-\[\#21262d\].text-\[\#00e5a0\],
+.bg-\[\#21262d\].text-\[\#ff3a3a\] {
+  background-color: var(--card-secondary) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+/* 🔴 Bearish Neon Danger Red */
+.text-\[\#ff3a3a\],
+.text-red-400 {
+  color: var(--danger) !important;
+  font-weight: 700 !important;
+  text-shadow: 0 0 6px rgba(239, 68, 68, 0.2) !important;
+}
+
+.bg-\[\#ff3a3a\]\/5,
+.bg-\[\#ff3a3a\]\/10,
+.bg-\[\#ff3a3a\]\/15,
+.bg-\[\#ff3a3a\]\/20 {
+  background-color: rgba(239, 68, 68, 0.1) !important;
+  border: 1px solid rgba(239, 68, 68, 0.25) !important;
+  color: var(--danger) !important;
+  font-weight: 700 !important;
+}
+
+/* 🔵 Electric Cyan walls */
+.bg-cyan-500\/10,
+.bg-cyan-400\/5,
+.bg-cyan-400\/10 {
+  background-color: rgba(6, 182, 212, 0.1) !important;
+  border: 1px solid rgba(6, 182, 212, 0.25) !important;
+  color: var(--cyan) !important;
+}
+
+.text-cyan-400 {
+  color: var(--cyan) !important;
+  font-weight: 700 !important;
+  text-shadow: 0 0 6px rgba(6, 182, 212, 0.2) !important;
+}
+
+/* 7. High-Contrast Dense Tables */
+table {
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+}
+
+thead tr {
+  background-color: var(--card-secondary) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+thead th {
+  color: var(--text-secondary) !important;
+  font-weight: 700 !important;
+  font-size: 9.5px !important;
+  letter-spacing: 0.05em !important;
+  padding: 10px 14px !important;
+  text-transform: uppercase !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+tbody tr {
+  background-color: transparent !important;
+  transition: all 0.2s ease !important;
+}
+
+tbody tr:nth-child(even) {
+  background-color: rgba(255, 255, 255, 0.01) !important;
+}
+
+tbody tr:hover {
+  background-color: rgba(59, 130, 246, 0.05) !important; /* Blue glow row hover */
+}
+
+td {
+  padding: 11px 14px !important;
+  font-size: 11px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03) !important;
+  color: var(--text-primary) !important;
+}
+
+/* 8. Premium Fintech Buttons & Inputs */
+input[type="text"],
+input[type="password"],
+input[type="date"],
+select {
+  background-color: var(--card-bg) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: var(--text-primary) !important;
+  border-radius: 8px !important;
+  font-size: 11.5px !important;
+  padding: 8px 12px !important;
+  transition: all 0.2s ease !important;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="date"]:focus,
+select:focus {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25) !important;
+  outline: none !important;
+}
+
+/* 9. 🤖 Conversational AI Assistant layout */
+.bg-\[\#161b22\]\/40.border.border-\[\#21262d\]\/50.self-start {
+  background-color: var(--card-secondary) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: var(--text-primary) !important;
+  border-radius: 12px 12px 12px 0 !important;
+  padding: 12px 14px !important;
+}
+
+.bg-\[\#f0a500\]\/10.border.border-\[\#f0a500\]\/20.self-end {
+  background-color: rgba(245, 158, 11, 0.1) !important;
+  border: 1px solid rgba(245, 158, 11, 0.2) !important;
+  color: var(--warning) !important;
+  border-radius: 12px 12px 0 12px !important;
+  padding: 12px 14px !important;
+}
+
+code {
+  font-family: var(--font-mono) !important;
+  background-color: var(--bg-main) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  color: var(--warning) !important;
+  padding: 2px 6px !important;
+  border-radius: 4px !important;
+}
+
+/* Replay modal backdrop filter overrides */
+.bg-\[\#050508\]\/80 {
+  background-color: rgba(6, 8, 22, 0.8) !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+/* Sparklines vector grid lines */
+line[stroke="#161b22"] {
+  stroke: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* 10. Premium Neon Gradient CTA Buttons */
+button.bg-\[\#f0a500\] {
+  background: linear-gradient(135deg, var(--purple) 0%, #2563eb 100%) !important;
+  border: none !important;
+  color: var(--text-primary) !important;
+  font-weight: 600 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 25px rgba(124, 58, 237, 0.35) !important;
+  transition: all 0.25s ease !important;
+}
+
+button.bg-\[\#f0a500\]:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 15px 35px rgba(124, 58, 237, 0.45) !important;
+}
+
+/* Navigation button accents */
+.bg-\[\#f0a500\]\/10.text-\[\#f0a500\].border-\[\#f0a500\]\/30 {
+  background-color: rgba(59, 130, 246, 0.1) !important;
+  border-color: rgba(59, 130, 246, 0.25) !important;
+  color: var(--primary) !important;
+  font-weight: 700 !important;
+}
+
+/* Logout button styling */
+.bg-\#ff3a3a\/10.text-\#ff3a3a {
+  background-color: rgba(239, 68, 68, 0.1) !important;
+  border-color: rgba(239, 68, 68, 0.25) !important;
+  color: var(--danger) !important;
+}
+
+/* Interactive custom radar pulse animations */
+@keyframes radar-pulse-glow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(34, 197, 94, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
+
+.animate-ping {
+  animation: radar-pulse-glow 2s infinite !important;
+}
+
+/* ==========================================================
+   11. DYNAMIC PREMIUM TYPOGRAPHY SCALE & RESPONSIVE SCROLLING
+   ========================================================== */
+
+/* Scale up all micro-font size utility classes */
+.text-\[7px\],
+.text-\[7\.5px\],
+.text-\[8px\],
+.text-\[8\.5px\],
+.text-\[9px\],
+.text-\[9\.5px\],
+.text-\[10px\] {
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+}
+
+.text-\[10\.5px\],
+.text-\[11px\],
+.text-xs {
+  font-size: 13.5px !important;
+  line-height: 1.55 !important;
+}
+
+.text-\[12px\],
+.text-\[13px\],
+.text-\[14px\],
+.text-sm {
+  font-size: 15.5px !important;
+  line-height: 1.65 !important;
+}
+
+.text-base {
+  font-size: 17px !important;
+}
+
+.text-lg {
+  font-size: 20px !important;
+}
+
+.text-xl {
+  font-size: 23px !important;
+}
+
+.text-2xl {
+  font-size: 27px !important;
+}
+
+/* Premium dense table header adjustment */
+thead th {
+  font-size: 12px !important;
+  letter-spacing: 0.06em !important;
+  padding: 12px 16px !important;
+}
+
+/* Premium dense table cell adjustment */
+td {
+  font-size: 13.5px !important;
+  padding: 12px 16px !important;
+}
+
+/* Ensure smooth native scrolling */
+html, body {
+  scroll-behavior: smooth !important;
+}
+
+/* Enable high-fidelity scroll indicators on overflowing panels */
+.overflow-y-auto,
+.overflow-x-auto {
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(59, 130, 246, 0.25) var(--bg-main) !important;
+}
+
+/* Expand max heights of content regions to feel less squished and scroll better */
+.max-h-\[300px\] {
+  max-height: 420px !important;
+}
+
+.max-h-\[480px\] {
+  max-height: 580px !important;
+}
+
+/* Give more breathing room to the grid spacing for premium layout scan-ability */
+main.grid {
+  gap: 20px !important;
+  padding: 20px !important;
+}
+

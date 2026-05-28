@@ -1,0 +1,194 @@
+================================================================================
+          NEXUS ALPHA // INTRADAY INSTITUTIONAL TRADING TERMINAL
+                        COMPLETE SYSTEM MANUAL & STRATEGY
+================================================================================
+
+This document outlines the complete operational workflow, technical indicators, 
+quantitative strategy, and multi-agent AI architecture of the Nexus Alpha 
+Intraday Trading Terminal. Use this manual to understand exactly how the terminal 
+processes data, scores setups, and streams intelligence.
+
+--------------------------------------------------------------------------------
+1. CORE PHILOSOPHY & ARCHITECTURE
+--------------------------------------------------------------------------------
+Nexus Alpha is designed as a personal, hybrid trading terminal built specifically 
+for the Indian Stock Market (NSE/BSE). 
+
+The platform separates the trading layers into two distinct pipelines:
+- DETERMINISTIC PIPELINE (Code-Driven): 100% mathematical, rule-based indicators, 
+  open interest math, relative strength matrices, and structure detections. 
+  These run locally on the client to ensure zero-latency accuracy.
+- COGNITIVE PIPELINE (AI-Driven): Uses Anthropic Claude as an institutional 
+  analyst layer to explain setups, evaluate cross-market risk variables, and 
+  formulate structured commentaries. 
+
+--------------------------------------------------------------------------------
+2. PRE-MARKET SEQUENCE (09:00 - 09:15 IST)
+--------------------------------------------------------------------------------
+Before the bell rings, the terminal aggregates global and institutional data to 
+establish the daily market regime and trading bias.
+
+A. GIFT Nifty Gap Estimation
+   - The terminal pulls the live price of GIFT Nifty and compares it to the 
+     previous close of the Nifty 50 Index.
+   - It calculates:
+     - Gap Points = GIFT Nifty Price - Nifty Spot Close
+     - Gap Percent = (Gap Points / Nifty Spot Close) * 100
+   - Thresholds:
+     - > +15 Points: GAP UP (Bullish opening bias)
+     - < -15 Points: GAP DOWN (Bearish opening bias)
+     - Between -15 and +15: FLAT OPENING (Neutral opening bias)
+
+B. FII & DII (Institutional Flow) Analysis
+   - Foreign Institutional Investors (FII) and Domestic Institutional Investors 
+     (DII) net cash and futures transactions are parsed from daily exchange files.
+   - Long/Short Ratio: Computes the net active long contracts relative to short 
+     contracts in Index Futures. A ratio > 1.2 indicates aggressive institutional 
+     long positioning; < 0.8 indicates distribution and potential short traps.
+   - Net cash inflows determine if institutions are active accumulators (buying 
+     eq block shares) or distributors (selling eq block shares).
+
+C. Opening Volatility & India VIX
+   - India VIX (Volatility Index) is measured.
+   - VIX Ranges:
+     - VIX < 13 (LOW): Stable market conditions; breakout strategies have lower 
+       follow-through; range retests and mean reversion are highly profitable.
+     - VIX 13 - 18 (NORMAL): Balanced premium pricing; structural breakouts and 
+       trend following operate with high predictability.
+     - VIX > 18 (HIGH): Elevated structural risk; wider stop-losses are required; 
+       options premium spreads are expensive; leverage must be reduced.
+     - VIX > 25 (EXTREME): Option buying is highly risky due to IV crush; 
+       hedged options selling is preferred.
+
+D. Daily Market Regime Formulation
+   - Combining the GIFT Nifty Gap, FII/DII cash flow direction, and India VIX, 
+     the terminal classifies the day's starting market environment as:
+     - TRENDING_UP (Bullish gap + FII buying + low VIX)
+     - TRENDING_DOWN (Bearish gap + FII selling + rising VIX)
+     - RANGING (Flat open + mixed institutional flows)
+     - CHOPPY (High VIX + directionless opening ticks)
+
+--------------------------------------------------------------------------------
+3. INTRADAY RADAR & STRATEGY ENGINE (09:15 - 15:30 IST)
+--------------------------------------------------------------------------------
+Once the market opens, the terminal runs parallel scanning layers to find 
+high-probability setups.
+
+A. Smart Money Concepts (SMC) Engine
+   The local client-side engine scans 5M/15M charts for structural breaks:
+   - Order Blocks (OB): Areas of heavy institutional order blocks where a strong 
+     impulsive move originated. Unmitigated OBs act as powerful magnetic zones 
+     for entries on pullback retests.
+   - Fair Value Gaps (FVG): Price imbalances created by single-direction candles. 
+     Unfilled FVGs act as liquidity targets that the price naturally returns to fill.
+   - Change of Character (CHOCH): Represents the first sign of a trend reversal 
+     (e.g., price breaking past the last lower high in a downtrend).
+   - Break of Structure (BOS): Signifies trend continuation (e.g., price breaking 
+     and closing past the previous higher high).
+
+B. Relative Strength (RS) Scanner
+   - Compares the performance of all Nifty 50 stocks against the Nifty 50 Index.
+   - RS Score = Stock Performance (%) - Nifty Index Performance (%)
+   - Positive RS Score: Stock is showing outperformance (alpha). If Nifty falls, 
+     these stocks drop less. If Nifty rises, these stocks surge aggressively.
+   - Negative RS Score: Stock is showing underperformance. Ideal candidates 
+     for short setups when index structure breaks downward.
+
+C. Futures Open Interest (OI) Buildup Classifier
+   Every constituent stock's futures contracts are classified in real-time:
+   - LONG BUILDUP: Price Up + Open Interest Up (Institutional long accumulation).
+   - SHORT BUILDUP: Price Down + Open Interest Up (Institutional short addition).
+   - LONG UNWINDING: Price Down + Open Interest Down (Long positions booking profits).
+   - SHORT COVERING: Price Up + Open Interest Down (Shorts rushing to exit).
+
+D. Option Chain Walls & Heatmaps
+   - Put-Call Ratio (PCR): Volume/OI ratio. PCR > 1.2 is bullish (strong put writing); 
+     PCR < 0.8 is bearish (strong call writing).
+   - Call Walls (Resistance): The call strike with the highest Open Interest. 
+     Represents the ceiling price that option sellers are actively defending.
+   - Put Walls (Support): The put strike with the highest Open Interest. 
+     Represents the floor price where active option writers are adding support.
+   - Max Pain: The strike price where option buyers would experience maximum 
+     financial loss. Option sellers naturally pull the price toward this strike 
+     at expiry.
+
+--------------------------------------------------------------------------------
+4. THE CONFLUENCE SCORER (THE TRADING EDGE)
+--------------------------------------------------------------------------------
+Rather than taking raw single-indicator signals, the terminal aggregates all 
+modules into a single, unified "Confluence Score" from 0 to 100:
+
+- SMC Structure Alignment (OB Retests + BOS/CHOCH): 30% Weight
+- Options Chain Metrics (PCR + strike walls proximity): 20% Weight
+- India VIX Trend Compatibility: 15% Weight
+- Institutional Position Stance (FII/DII): 15% Weight
+- Sector Rotation Momentum: 20% Weight
+
+Confluence Grades:
+- GRADE A+ (Score 85-100): High-probability setup. Strong alignment across structure, 
+  derivative metrics, and sector momentum.
+- GRADE A (Score 70-84): High-probability setup. Solid structure with minor VIX or 
+  institutional friction.
+- GRADE B (Score 55-69): Moderate setup. Requires tighter stop-losses.
+- GRADE C (Score < 55): Low probability. Terminal recommends waiting or mean-reversion 
+  strategies only.
+
+--------------------------------------------------------------------------------
+5. PRE-ALERT AND POST-ALERT WORKFLOWS
+--------------------------------------------------------------------------------
+
+A. Pre-Alert Phase (Scanning & Triggering)
+   - The radar continually scans candle logs.
+   - An indicator anomaly is detected (e.g., stock hits a daily order block, 
+     relative strength jumps into positive zone, and futures OI signals 
+     a Long Buildup).
+   - The Confluence Scorer runs to verify the grade is at least A or A+.
+   - If qualified, the Terminal triggers an alert on the UI.
+
+B. Post-Alert Phase (Execution & Strategy Setup)
+   - **Signal Generation**: The terminal automatically calculates entry thresholds:
+     - Entry Zone: Proximity of the Order Block or breakout level.
+     - Stop-Loss (SL): Just below the invalidation level (last structural swing low).
+     - Targets: 1:2 or 1:3 Risk-to-Reward ratio based on unfilled Fair Value Gaps 
+       or Call/Put Walls.
+   - **AI Analysis Dispatch**: The setup's data matrix is dispatched to the AI.
+   - **Execution Tracker**: The trade is logged into the simulated replay ledger 
+     to track performance expectancy, win rates, and profit factors.
+
+--------------------------------------------------------------------------------
+6. CLAUDE MULTI-AGENT QUANT SYSTEM
+--------------------------------------------------------------------------------
+When a trade setup is dispatched, the terminal routes it dynamically based on the 
+calculated Confluence Grade to manage API costs and optimize response speeds:
+
+- GRADE A+ SETUPS: Dispatched to the premium model (e.g. `claude-3-opus-20240229`) 
+  for deep-dive contextual, multi-variable structural evaluation.
+- HIGH-GRADE SETUPS: Routed to `claude-3-5-sonnet-20240620` for quick, precise, 
+  technical reviews.
+- MODERATE SETUPS: Dispatched to the fast `claude-3-haiku-20240307` model to 
+  minimize latency and optimize token budgets.
+
+--------------------------------------------------------------------------------
+7. AI BROKER DESK (KITE MCP CONVERSATIONAL DESK)
+--------------------------------------------------------------------------------
+The conversational interface acts as a local Broker Desk.
+- When you type a query (e.g. *"Show my portfolio positions"* or *"Which sector is 
+  strongest?"*), the backend loads local files and settings (`settings.json`).
+- If an API key is available, it queries Claude using lightweight, contextual 
+  instructions to explain performance in structured institutional format.
+- If no key is set, it falls back to a deterministic query parser that reads 
+  current sector momentum and mock portfolios to provide identical, fast 
+  markdown tables and analysis without database fees or cloud exposure.
+
+--------------------------------------------------------------------------------
+8. THE HISTORICAL REPLAY BACKTESTER
+--------------------------------------------------------------------------------
+Allows traders to test strategies against past intraday session candles:
+- ORB Strategy: Enters on 15-minute high/low breakout boundaries.
+- SMC Order Block Retest: Enters on price pullback into major detected 5M order blocks.
+- It returns complete statistics: Total trades, Win-Rate, Profit Factor (Gross 
+  Gains / Gross Losses), and Sharpe Ratio expectancy.
+
+================================================================================
+          Nexus Alpha Intraday Terminal — Evolve the Platform.
+================================================================================

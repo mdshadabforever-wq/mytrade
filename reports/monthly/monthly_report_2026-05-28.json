@@ -1,0 +1,73 @@
+{
+  "id": "local_akn170o37",
+  "type": "MONTHLY",
+  "dateString": "2026-05-28",
+  "rawReport": {
+    "type": "MONTHLY",
+    "dateString": "2026-05-28",
+    "niftyOpen": 24050,
+    "niftyHigh": 24558.8,
+    "niftyLow": 23997.2,
+    "niftyClose": 24236.2,
+    "niftyChangePercent": 0.77,
+    "strongestSector": "NIFTY BANK",
+    "strongestSectorChange": 1.56,
+    "weakestSector": "NIFTY METAL",
+    "weakestSectorChange": -1.1,
+    "marketRegime": "TRENDING_UP",
+    "bias": "BULLISH",
+    "vixValue": 15.1,
+    "fiiNetCash": 1370,
+    "diiNetCash": -521,
+    "alertsList": [
+      {
+        "stock": "HDFCBANK",
+        "type": "SMC_BULLISH_OB",
+        "confidence": 88,
+        "entry": 1510.5,
+        "sl": 1500,
+        "target": 1530,
+        "status": "WIN",
+        "reason": "Unmitigated 5M Order Block retest matching positive Relative Strength rotation"
+      },
+      {
+        "stock": "RELIANCE",
+        "type": "CHOCH_BREAKOUT",
+        "confidence": 82,
+        "entry": 2435,
+        "sl": 2415,
+        "target": 2470,
+        "status": "WIN",
+        "reason": "Change of Character detected with volume expansion above Call Wall"
+      },
+      {
+        "stock": "TCS",
+        "type": "ORB_BEARISH_BREAKOUT",
+        "confidence": 74,
+        "entry": 3830,
+        "sl": 3850,
+        "target": 3790,
+        "status": "LOSS",
+        "reason": "Bearish 15M Opening Range breakout triggered, hit stop loss on Nifty IT reversal"
+      }
+    ],
+    "simulationResult": {
+      "totalTrades": 3,
+      "wins": 2,
+      "losses": 1,
+      "winRatePercent": 67,
+      "profitFactor": 2.5,
+      "sharpeRatio": 1.85,
+      "netPnlPoints": 33
+    },
+    "newsSummary": [
+      "HDFC Bank launches structural retail credit push; plans ₹5,000 Cr corporate loan book expansion",
+      "NIFTY IT gains momentum as TCS leads major tech rotation, stock surges 3.4%",
+      "Automotive volumes slip in passenger vehicle segment; Maruti and Mahindra report flat growth",
+      "Adani Ports acquires new logistics gateway terminal on east coast; increases capacity by 12%",
+      "RBI Governor indicates steady interest rate profile; inflation risks cap immediate cuts"
+    ]
+  },
+  "markdown": "# 📊 MONTHLY INSTITUTIONAL MARKET INTELLIGENCE JOURNAL (2026-05-28)\n\n## 1. MARKET REGIME & SUMMARY\nToday the Nifty 50 Index closed at **₹24,236.2** representing an intraday change of <span class=\"text-[#10b981] font-bold\">+0.77%</span>.\n- **Index Open**: ₹24,050 | **High**: ₹24,558.8 | **Low**: ₹23,997.2\n- **Market Trend Regime**: **TRENDING UP** (Bias: **BULLISH**)\n- **Strongest Rotation Sector**: **NIFTY BANK** (+1.56%)\n- **Weakest Rotation Sector**: **NIFTY METAL** (-1.1%)\n\n> [!NOTE]\n> Sector momentum was highly concentrated in **NIFTY BANK** where institutional accumulation blocks triggered long breakouts.\n\n## 2. INSTITUTIONAL FLOWS & FUTURES ACTIVITY\n- **FII Net Cash Activity**: **BUYING** (Net: **₹1,370 Cr**)\n- **DII Net Cash Activity**: **SELLING** (Net: **₹521 Cr**)\n- **India VIX**: **15.1** (Volatility conditions: **NORMAL**)\n\n> [!IMPORTANT]\n> Net aggressive buying from FII blocks supported the index during the second-half rotation. Futures Open Interest (OI) buildup shows significant long adds in **NIFTY BANK** stocks like HDFCBANK and RELIANCE.\n\n## 3. INTRADAY RADAR ALERTS SUMMARY\nThe terminal generated **3** high-confluence alerts during the trading session:\n\n| INSTRUMENT | SIGNAL TYPE | CONFIDENCE | ENTRY | STOP LOSS | TARGET | STATUS |\n| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n| **HDFCBANK** | SMC_BULLISH_OB | 88% | ₹1510.50 | ₹1500.00 | ₹1530.00 | <span class=\"text-[#10b981] font-bold\">WIN</span> |\n| **RELIANCE** | CHOCH_BREAKOUT | 82% | ₹2435.00 | ₹2415.00 | ₹2470.00 | <span class=\"text-[#10b981] font-bold\">WIN</span> |\n| **TCS** | ORB_BEARISH_BREAKOUT | 74% | ₹3830.00 | ₹3850.00 | ₹3790.00 | <span class=\"text-[#ef4444] font-bold\">LOSS</span> |\n\n### Why the Signals Triggered:\n1. **HDFCBANK (SMC Bullish OB)**: Imbalance mitigation on the 5M chart matching high FII net buying flows. Eased into targets successfully.\n2. **RELIANCE (CHOCH Breakout)**: Breakout above daily resistance on heavy institutional volume accumulation.\n3. **TCS (ORB Bearish Breakout)**: Enters on 15M range floor breakout, but got trapped when Nifty IT reversed to support the main index.\n\n## 4. BEST SETUP OF THE DAY\nThe strongest trade setup occurred in **HDFCBANK** at **11:15 IST**. \n- **Confluence Factors**: Clear Change of Character (CHOCH) on the 5M chart, price retest into a previously unmitigated Order Block, positive Relative Strength score relative to Nifty, and aggressive institutional buying support.\n- **Result**: Impeccable target reach with near-zero stop-loss drawdown, securing a **1:2.2 Risk-to-Reward ratio**.\n\n## 5. FAILED SETUP ANALYSIS\nThe underperforming setup of the day was **TCS** (ORB Bearish Breakout). \n- **Failure Cause**: Bearish trigger occurred on the 15M Opening Range floor breakout, but was immediately met with a liquidity sweep. Heavy FII buy orders rotated aggressively back into Nifty IT leaders, causing a V-shape reversal that hit our stop loss.\n- **Learning**: Avoid trading short breakouts on sector leaders when the overall index FII flow direction is strongly positive.\n\n## 6. SENSITIVE NEWS & EVENTS SUMMARY\n- **News Rotation**: HDFC Bank launches structural retail credit push; plans ₹5,000 Cr corporate loan book expansion\n- **Sector Movements**: NIFTY IT gains momentum as TCS leads major tech rotation, stock surges 3.4%\n- **Impact**: Institutional risk limits remained clean; no high-impact global rate hikes or macro threats impacted the session.\n\n## 7. AI LEARNING INSIGHTS\n- **What Worked**: Pullbacks into major unmitigated 5M/15M Order Blocks performed with extremely high win expectancy.\n- **What to Avoid**: Short breakouts on high-volume days when FIIs are net cash accumulators. These represent high-risk liquidity traps.\n\n## 8. PREPARATION FOR TOMORROW\n- **Watchlist Sectors**: **NIFTY BANK**, **NIFTY METAL**\n- **Watchlist Stocks**: **HDFCBANK**, **RELIANCE**\n- **Scenarios**: If Nifty spot sustains above today's Put Wall at **₹24,136.2**, maintain long structure targets toward Call Walls at **₹24,386.2**.",
+  "createdAt": "2026-05-28T16:35:46.470Z"
+}

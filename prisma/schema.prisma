@@ -1,0 +1,130 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 1. Trades database table
+model Trade {
+  id          String    @id @default(uuid())
+  type        String    // "BUY" | "SELL"
+  symbol      String    // e.g. "RELIANCE"
+  entryPrice  Float
+  stopLoss    Float
+  target      Float
+  exitPrice   Float?
+  status      String    // "OPEN" | "WIN" | "LOSS"
+  pnlPoints   Float     @default(0.0)
+  entryTime   DateTime
+  exitTime    DateTime?
+  strategy    String    @default("ORB")
+  createdAt   DateTime  @default(now())
+}
+
+// 2. AI Alerts database table
+model AiAlert {
+  id          String   @id @default(uuid())
+  timestamp   DateTime @default(now())
+  score       Int
+  grade       String   // "A_PLUS" | "HIGH" | "MODERATE" | "LOW_QUALITY" | "NO_TRADE"
+  direction   String   // "BUY" | "SELL" | "WAIT"
+  headline    String
+  summary     String
+  analysisId  String   @unique
+  layersData  Json     // Full cached JSON of agent outputs
+  createdAt   DateTime @default(now())
+}
+
+// 3. Market Sessions
+model MarketSession {
+  id            String   @id @default(uuid())
+  name          String   // e.g. "FIRST WINDOW"
+  isMarketOpen  Boolean
+  canScan       Boolean
+  istTimeString String
+  createdAt     DateTime @default(now())
+}
+
+// 4. Sector Strength tracking
+model SectorStrength {
+  id            String   @id @default(uuid())
+  name          String   // e.g. "NIFTY BANK"
+  price         Float
+  changePercent Float
+  momentum      String   // "ACCELERATING" | "DECELERATING" | "STABLE" | "EXHAUSTED"
+  bias          String   // "BULLISH" | "BEARISH" | "NEUTRAL"
+  leadingStock  String
+  createdAt     DateTime @default(now())
+}
+
+// 5. Intraday Futures Activity
+model FuturesActivity {
+  id               String   @id @default(uuid())
+  symbol           String   // e.g. "INFY"
+  sector           String
+  price            Float
+  changePercent    Float
+  open             Float
+  high             Float
+  low              Float
+  close            Float
+  volume           Int
+  vwap             Float
+  oi               Int
+  oiChangePercent  Float
+  buildup          String   // "LONG_BUILDUP" | "SHORT_BUILDUP" | "LONG_UNWINDING" | "SHORT_COVERING"
+  relativeStrength Float
+  orbStatus        String
+  createdAt        DateTime @default(now())
+}
+
+// 6. Smart Money events logs
+model SmartMoneyEvent {
+  id          String   @id @default(uuid())
+  type        String   // "BOS" | "CHOCH" | "BULLISH_OB" | "BEARISH_OB" | "BSL_SWEEP" | "SSL_SWEEP"
+  zoneStart   Float
+  zoneEnd     Float
+  strength    Int
+  timestamp   DateTime
+  description String
+  createdAt   DateTime @default(now())
+}
+
+// 7. AI Decisions auditor logs
+model AiDecision {
+  id               String   @id @default(uuid())
+  alertId          String
+  agentName        String   // "REGIME" | "SECTOR" | "STOCK" | "FUTURES" | "SMC" | "RISK"
+  agentScore       Int
+  agentBias        String
+  decisionReason   String
+  createdAt        DateTime @default(now())
+}
+
+// 8. Performance diagnostic metrics
+model PerformanceMetric {
+  id                 String   @id @default(uuid())
+  totalTrades        Int
+  wins               Int
+  losses             Int
+  winRatePercent     Int
+  profitFactor       Float
+  maxDrawdownPoints  Float
+  sharpeRatio        Float
+  strategyUsed       String
+  createdAt          DateTime @default(now())
+}
+
+// 9. Daily/Weekly/Monthly Reports database table
+model MarketReport {
+  id          String   @id @default(uuid())
+  type        String   // "DAILY" | "WEEKLY" | "MONTHLY"
+  dateString  String   // e.g. "2026-05-28"
+  contentJson Json     // The structured JSON report data
+  markdown    String   // The markdown representation of the report
+  createdAt   DateTime @default(now())
+}
+
