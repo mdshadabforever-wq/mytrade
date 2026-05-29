@@ -1,7 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getLocalReportByFilename } from '@/lib/report-engine';
+import fs from 'fs';
+import path from 'path';
 
 export const dynamic = 'force-dynamic';
+
+function getLocalReportByFilename(type: 'DAILY' | 'WEEKLY' | 'MONTHLY', filename: string) {
+  const reportsDir = path.join(process.cwd(), 'reports');
+  const targetDir = path.join(reportsDir, type.toLowerCase());
+  const filePath = path.join(targetDir, filename);
+  if (!fs.existsSync(filePath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
 
 function convertToBlogHtml(markdown: string): string {
   // Remove code blocks
