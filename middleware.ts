@@ -9,7 +9,9 @@ const PUBLIC_ROUTES = ['/login', '/api/auth'];
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
 const RATE_LIMIT_MAX = 20; // max 20 requests per minute per IP on heavy routes
-const RATE_LIMITED_APIS = ['/api/stream-analysis', '/api/analyze'];
+const RATE_LIMITED_APIS = ['/api/stream-analysis', '/api/analyze', '/api/auth'];
+// Auth gets a much tighter cap; other heavy endpoints use RATE_LIMIT_MAX
+const AUTH_RATE_LIMIT_MAX = 5;  // 5 attempts per minute per IP
 
 function getJwtSecret(): Uint8Array {
   const secret = process.env.JWT_SECRET || 'nexus-alpha-fallback-secret-change-in-production';
@@ -28,7 +30,9 @@ function isRateLimited(ip: string, pathname: string): boolean {
     return false;
   }
 
-  if (entry.count >= RATE_LIMIT_MAX) return true;
+  // Auth endpoints get a tighter per-minute cap
+  const limit = pathname.startsWith('/api/auth') ? AUTH_RATE_LIMIT_MAX : RATE_LIMIT_MAX;
+  if (entry.count >= limit) return true;
 
   entry.count++;
   return false;
@@ -47,19 +51,19 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check if route is public
-  const isPublic = PUBLIC_ROUTES.some(r => pathname === r || pathname.startsWith(r + '/'));
-  if (isPublic) {
-    return NextResponse.next();
-  }
-
-  // ─── Rate limiting check ───
+  // ─── Rate limiting check (runs before public-route bypass for /api/auth) ───
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1';
   if (isRateLimited(ip, pathname)) {
     return NextResponse.json(
       { error: 'Too many requests. Slow down.' },
       { status: 429 }
     );
+  }
+
+  // Check if route is public (no auth required, but still rate-limited above)
+  const isPublic = PUBLIC_ROUTES.some(r => pathname === r || pathname.startsWith(r + '/'));
+  if (isPublic) {
+    return NextResponse.next();
   }
 
   // ─── JWT Authentication ───

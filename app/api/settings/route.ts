@@ -128,13 +128,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'Failed to write configuration file' }, { status: 500 });
     }
 
-    // Set process.env options dynamically for runtime clients
-    if (updatedSettings.anthropicKey) process.env.ANTHROPIC_API_KEY = updatedSettings.anthropicKey;
-    if (updatedSettings.kiteApiKey) process.env.KITE_API_KEY = updatedSettings.kiteApiKey;
-    if (updatedSettings.kiteAccessToken) process.env.KITE_ACCESS_TOKEN = updatedSettings.kiteAccessToken;
-    if (updatedSettings.telegramBotToken) process.env.TELEGRAM_BOT_TOKEN = updatedSettings.telegramBotToken;
-    if (updatedSettings.telegramChatId) process.env.TELEGRAM_CHAT_ID = updatedSettings.telegramChatId;
-
     return NextResponse.json({ success: true, message: 'Settings saved successfully' });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

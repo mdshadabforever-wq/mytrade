@@ -1,4 +1,7 @@
-import React from 'react';
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { Landmark, ArrowUpRight, ArrowDownRight, Compass } from 'lucide-react';
 import { formatIndianRupees } from '@/lib/utils';
 
@@ -7,6 +10,22 @@ export interface FIIDIIPanelProps {
 }
 
 export function FIIDIIPanel({ institutional }: FIIDIIPanelProps) {
+  const [participantOI, setParticipantOI] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchOI = async () => {
+      try {
+        const res = await axios.get('/api/participant-oi');
+        if (res.data?.fii) setParticipantOI(res.data);
+      } catch (err) {
+        console.warn('[FIIDII PANEL] Participant OI fetch failed:', err);
+      }
+    };
+    fetchOI();
+    const timer = window.setInterval(fetchOI, 30 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   if (!institutional) {
     return (
       <div className="w-full h-[180px] bg-[#0d1117] border border-[#21262d] flex items-center justify-center text-xs text-[#8892a4] font-mono animate-pulse">
@@ -181,6 +200,53 @@ export function FIIDIIPanel({ institutional }: FIIDIIPanelProps) {
           {isNetBuying ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
           <span className="uppercase">INSTITUTIONS NET {isNetBuying ? `BUYING (+₹${formatIndianRupees(combinedNet)} Cr)` : `SELLING (₹${formatIndianRupees(combinedNet)} Cr)`}</span>
         </div>
+      </div>
+
+      {/* F&O Participant-wise OI Section */}
+      <div className="mt-3 border-t border-[#21262d] pt-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[9px] font-bold text-[#8892a4] uppercase tracking-wider">F&O Participant OI (EOD)</span>
+          {participantOI ? (
+            <span className={`text-[7px] px-1 rounded font-bold border ${
+              participantOI.source === 'LIVE'
+                ? 'text-[#00e5a0] bg-[#00e5a0]/10 border-[#00e5a0]/20'
+                : 'text-[#f0a500] bg-[#f0a500]/10 border-[#f0a500]/20'
+            }`}>
+              {participantOI.source}
+            </span>
+          ) : (
+            <span className="text-[7px] text-[#8892a4] animate-pulse">LOADING...</span>
+          )}
+        </div>
+
+        {participantOI ? (
+          <div className="flex flex-col space-y-1">
+            {[
+              { label: 'FII',    data: participantOI.fii },
+              { label: 'DII',    data: participantOI.dii },
+              { label: 'PRO',    data: participantOI.pro },
+              { label: 'RETAIL', data: participantOI.retail }
+            ].map(({ label, data }) => (
+              <div key={label} className="flex items-center justify-between bg-[#050508] border border-[#21262d] px-2 py-1 rounded">
+                <span className="text-[8.5px] font-bold text-[#8892a4] w-10">{label}</span>
+                <span className="text-[8.5px] font-mono text-white flex-1 text-center">
+                  {(data?.netOI ?? 0) >= 0 ? '+' : ''}{(data?.netOI ?? 0).toLocaleString()} cts
+                </span>
+                <span className={`text-[7.5px] font-black px-1.5 py-0.5 rounded border ${
+                  data?.direction === 'LONG'
+                    ? 'text-[#00e5a0] bg-[#00e5a0]/10 border-[#00e5a0]/25'
+                    : data?.direction === 'SHORT'
+                    ? 'text-[#ff3a3a] bg-[#ff3a3a]/10 border-[#ff3a3a]/25'
+                    : 'text-[#8892a4] bg-[#21262d] border-[#21262d]'
+                }`}>
+                  {data?.direction ?? 'NEUTRAL'}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-[8px] text-[#8892a4] italic font-sans">Fetching F&O positioning data...</div>
+        )}
       </div>
 
     </div>

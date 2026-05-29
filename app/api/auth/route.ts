@@ -11,10 +11,48 @@ function getJwtSecret(): Uint8Array {
   return new TextEncoder().encode(secret);
 }
 
+// ─── Brute force protection: in-memory attempt tracker ──────────────────────
+const failedAttempts = new Map<string, { count: number; lockedUntil: number }>();
+const MAX_ATTEMPTS = 5;
+const LOCKOUT_MS = 15 * 60 * 1000; // 15 minutes
+
+function getClientIp(request: NextRequest): string {
+  return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1';
+}
+
+function checkBruteForce(ip: string): { locked: boolean; remainingMs: number } {
+  const entry = failedAttempts.get(ip);
+  if (!entry) return { locked: false, remainingMs: 0 };
+  if (Date.now() < entry.lockedUntil) {
+    return { locked: true, remainingMs: entry.lockedUntil - Date.now() };
+  }
+  // Lock expired — reset
+  failedAttempts.delete(ip);
+  return { locked: false, remainingMs: 0 };
+}
+
+function recordFailedAttempt(ip: string): void {
+  const entry = failedAttempts.get(ip) || { count: 0, lockedUntil: 0 };
+  entry.count++;
+  if (entry.count >= MAX_ATTEMPTS) {
+    entry.lockedUntil = Date.now() + LOCKOUT_MS;
+    console.warn(`[AUTH] IP ${ip} locked out after ${MAX_ATTEMPTS} failed attempts.`);
+  }
+  failedAttempts.set(ip, entry);
+}
+
+function clearFailedAttempts(ip: string): void {
+  failedAttempts.delete(ip);
+}
+
 async function validateCredentials(passcode?: string, email?: string, password?: string): Promise<boolean> {
   // Method 1: Passcode (from env)
   if (passcode) {
-    const envPasscode = process.env.OWNER_PASSCODE || 'nexus2026';
+    const envPasscode = process.env.OWNER_PASSCODE;
+    if (!envPasscode) {
+      console.warn('[AUTH] OWNER_PASSCODE not set in environment. Passcode login disabled.');
+      return false;
+    }
     return passcode === envPasscode;
   }
 
@@ -40,13 +78,26 @@ async function validateCredentials(passcode?: string, email?: string, password?:
 
 export async function POST(request: NextRequest) {
   try {
+    const ip = getClientIp(request);
+
+    // ─── Brute force check ───────────────────────────────────────────────────
+    const { locked, remainingMs } = checkBruteForce(ip);
+    if (locked) {
+      const minutesLeft = Math.ceil(remainingMs / 60000);
+      return NextResponse.json(
+        { success: false, message: `Too many failed attempts. Try again in ${minutesLeft} minute(s).` },
+        { status: 429 }
+      );
+    }
+
     const body = await request.json();
     const { passcode, email, password } = body;
 
     const isValid = await validateCredentials(passcode, email, password);
 
     if (!isValid) {
-      // Add small delay to prevent brute force timing attacks
+      recordFailedAttempt(ip);
+      // Small delay to prevent timing attacks
       await new Promise(r => setTimeout(r, 500));
       return NextResponse.json(
         { success: false, message: 'Invalid credentials' },
@@ -55,6 +106,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ─── Generate signed JWT ─────────────────────────────────────────────────
+    clearFailedAttempts(ip);
     const secret = getJwtSecret();
     const token = await new SignJWT({ role: 'owner' })
       .setProtectedHeader({ alg: 'HS256' })
