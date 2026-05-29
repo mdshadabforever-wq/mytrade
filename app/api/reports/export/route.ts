@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import { jwtVerify } from 'jose';
 
 export const dynamic = 'force-dynamic';
+
+function getJwtSecret(): Uint8Array {
+  const secret = process.env.JWT_SECRET || 'nexus-alpha-fallback-secret-change-in-production';
+  return new TextEncoder().encode(secret);
+}
 
 function getLocalReportByFilename(type: 'DAILY' | 'WEEKLY' | 'MONTHLY', filename: string) {
   const reportsDir = path.join(process.cwd(), 'reports');
@@ -134,6 +140,27 @@ export async function GET(request: NextRequest) {
     // 🛡️ Build Check Bypass: Return 200 OK instead of 400 when compiled with missing parameters during Next.js Page Collection
     if (!type || !filename || !format) {
       return NextResponse.json({ success: true, message: 'Radar build check bypass active' });
+    }
+
+    // ─── Inline JWT Authentication ───
+    const sessionToken = request.cookies.get('nexus_session')?.value;
+    if (!sessionToken) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized. Valid session required.' },
+        { status: 401 }
+      );
+    }
+
+    try {
+      await jwtVerify(sessionToken, getJwtSecret(), {
+        issuer: 'nexus-alpha',
+        audience: 'nexus-owner',
+      });
+    } catch (err) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized. Invalid session.' },
+        { status: 401 }
+      );
     }
 
     const report = getLocalReportByFilename(type, filename);
