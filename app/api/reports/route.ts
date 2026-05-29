@@ -16,7 +16,10 @@ function getSavedSettings() {
   }
 }
 
-const SENT_REPORTS_FILE = path.join(process.cwd(), 'data', 'sent_reports.json');
+const isVercel = !!process.env.VERCEL;
+const SENT_REPORTS_FILE = isVercel 
+  ? path.join('/tmp', 'data', 'sent_reports.json') 
+  : path.join(process.cwd(), 'data', 'sent_reports.json');
 
 function hasReportBeenSent(dateString: string): boolean {
   if (!fs.existsSync(SENT_REPORTS_FILE)) return false;

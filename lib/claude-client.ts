@@ -22,31 +22,46 @@ function getAnthropicClient() {
   return new Anthropic({ apiKey: key });
 }
 
+export function sanitizeModelName(modelName: string): string {
+  if (!modelName) return 'claude-3-5-sonnet-20241022';
+  const name = modelName.trim().toLowerCase();
+  if (name.includes('sonnet') || name.includes('4-6')) {
+    return 'claude-3-5-sonnet-20241022';
+  }
+  if (name.includes('haiku') || name.includes('4-5-20251001')) {
+    return 'claude-3-5-haiku-20241022';
+  }
+  if (name.includes('opus') || name.includes('opus-4-5')) {
+    return 'claude-3-opus-20240229';
+  }
+  return modelName;
+}
+
 export function resolveModelName(modelTier: 'haiku' | 'sonnet' | 'opus'): string {
   const settings = getSavedSettings();
   const configuredModel = settings.anthropicModel;
   
   if (configuredModel) {
     if (modelTier === 'opus') {
-      return configuredModel;
+      return sanitizeModelName(configuredModel);
     }
     if (modelTier === 'sonnet' && (configuredModel.includes('sonnet') || configuredModel.includes('4-6'))) {
-      return configuredModel;
+      return sanitizeModelName(configuredModel);
     }
     if (modelTier === 'haiku') {
       if (configuredModel.includes('haiku')) {
-        return configuredModel;
+        return sanitizeModelName(configuredModel);
       }
       if (configuredModel.includes('sonnet') || configuredModel.includes('4-6')) {
-        return configuredModel;
+        return sanitizeModelName(configuredModel);
       }
     }
   }
   
   const modelMap = {
-    haiku: 'claude-haiku-4-5-20251001',
-    sonnet: 'claude-sonnet-4-6',
-    opus: 'claude-opus-4-5'
+    haiku: 'claude-3-5-haiku-20241022',
+    sonnet: 'claude-3-5-sonnet-20241022',
+    opus: 'claude-3-opus-20240229'
   };
   return modelMap[modelTier];
 }

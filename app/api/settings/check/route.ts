@@ -45,12 +45,21 @@ export async function POST(request: NextRequest) {
         if (key === 'admin' || key === 'mock' || key.startsWith('mock_')) {
           return NextResponse.json({ success: true, status: 'GREEN', message: 'Mock Anthropic Connection Successful (Hybrid Mode)' });
         }
-
         try {
+          const requestedModel = body.anthropicModel || settings.anthropicModel || 'claude-3-5-sonnet-20241022';
+          let sanitizedModel = requestedModel;
+          if (requestedModel.includes('sonnet') || requestedModel.includes('4-6')) {
+            sanitizedModel = 'claude-3-5-sonnet-20241022';
+          } else if (requestedModel.includes('haiku') || requestedModel.includes('4-5-20251001')) {
+            sanitizedModel = 'claude-3-5-haiku-20241022';
+          } else if (requestedModel.includes('opus') || requestedModel.includes('opus-4-5')) {
+            sanitizedModel = 'claude-3-opus-20240229';
+          }
+
           const client = new Anthropic({ apiKey: key });
           // Test with a lightweight message creation call using the active model
           await client.messages.create({
-            model: body.anthropicModel || settings.anthropicModel || 'claude-sonnet-4-6',
+            model: sanitizedModel,
             max_tokens: 1,
             messages: [{ role: 'user', content: 'ping' }],
           });

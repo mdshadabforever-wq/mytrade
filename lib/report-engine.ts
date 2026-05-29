@@ -494,13 +494,16 @@ A macro audit of all setups over the trailing monthly frame shows:
   let savedId = '';
   try {
     if (supabase) {
-      await supabase.from('daily_reports').insert({
+      const { error } = await supabase.from('daily_reports').insert({
         date: dateString,
         type: type,
-        content: reportMarkdown,
+        markdown: reportMarkdown,
         raw_data: JSON.stringify(rawReport),
         created_at: new Date().toISOString()
       });
+      if (error) {
+        throw new Error(error.message);
+      }
     } else if (process.env.DATABASE_URL) {
       const record = await getPrisma().marketReport.create({
         data: {

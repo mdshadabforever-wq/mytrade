@@ -101,7 +101,7 @@ Do not chase price outside entry zone.
       text: htmlMessage,
       parse_mode: 'HTML',
       disable_web_page_preview: true
-    });
+    }, { timeout: 5000 });
 
     return response.data?.ok === true;
   } catch (error: any) {
@@ -126,7 +126,7 @@ export async function sendTelegramTextMessage(
       chat_id: chatId,
       text: text,
       parse_mode: 'HTML'
-    });
+    }, { timeout: 5000 });
     return response.data?.ok === true;
   } catch (error: any) {
     console.error('[TELEGRAM] Generic message dispatch failed:', error.response?.data || error.message);
@@ -163,7 +163,7 @@ export async function sendTelegramNoTradeAlert(
       chat_id: chatId,
       text: htmlMessage,
       parse_mode: 'HTML'
-    });
+    }, { timeout: 5000 });
     return response.data?.ok === true;
   } catch (error: any) {
     console.error('[TELEGRAM] No-trade alert failed:', error.response?.data || error.message);
