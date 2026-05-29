@@ -565,7 +565,7 @@ export default function NexusAlphaTerminal() {
           giftNiftyGap: giftNifty?.gap || giftNifty?.gapPoints || 0,
           alignedIndicesCount,
           globalBias: regimeData?.bias || 'MIXED',
-          isLiveData: isGlobalLiveData
+          isLiveData: globalCues?.dow?.status === 'LIVE'
         },
         institutional: {
           fiiCash: institutional?.fii?.cash || 0,

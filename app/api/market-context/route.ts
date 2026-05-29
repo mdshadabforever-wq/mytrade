@@ -53,6 +53,11 @@ export async function GET() {
           fetchYFinanceQuote('INR=X')
         ]);
 
+        console.log('[LIVE CHECK] DOW:', dow?.price, dow ? 'LIVE' : 'FAILED');
+        console.log('[LIVE CHECK] NASDAQ:', nasdaq?.price, nasdaq ? 'LIVE' : 'FAILED');
+        console.log('[LIVE CHECK] CRUDE:', crude?.price, crude ? 'LIVE' : 'FAILED');
+        console.log('[LIVE CHECK] USDINR:', usdinr?.price, usdinr ? 'LIVE' : 'FAILED');
+
         const gcDow = dow ? { price: dow.price, changePercent: dow.changePercent, status: 'LIVE' } : { price: 50000, changePercent: 0.15, status: 'MOCK' };
         const gcNasdaq = nasdaq ? { price: nasdaq.price, changePercent: nasdaq.changePercent, status: 'LIVE' } : { price: 17800, changePercent: 0.35, status: 'MOCK' };
         const gcNikkei = nikkei ? { price: nikkei.price, changePercent: nikkei.changePercent, status: 'LIVE' } : { price: 37500, changePercent: 0.45, status: 'MOCK' };

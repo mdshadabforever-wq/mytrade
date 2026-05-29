@@ -37,11 +37,15 @@ export function GlobalContextBar({ data }: GlobalContextBarProps) {
     );
   };
 
-  const renderStatusIndicator = (status?: string) => {
-    if (status === 'LIVE') return <span className="text-[10px] ml-1">🟢</span>;
-    if (status === 'DELAYED') return <span className="text-[10px] ml-1">🟡</span>;
-    if (status === 'MOCK') return <span className="text-[10px] ml-1">🔴</span>;
-    return null;
+  const renderIndicator = (status?: string) => {
+    const isMock = status === 'MOCK';
+    return (
+      <span style={{
+        color: status === 'LIVE' ? '#00e5a0' :
+               status === 'DELAYED' ? '#f9ca24' : '#ff3a3a',
+        fontSize: 8, marginLeft: 2
+      }} title={isMock ? "Live fetch failed — showing fallback value" : undefined}>●</span>
+    );
   };
 
   return (
@@ -72,12 +76,12 @@ export function GlobalContextBar({ data }: GlobalContextBarProps) {
         >
           <div className="text-[9px] text-[#8892a4]">DOW JONES</div>
           <div className="flex items-center space-x-1">
-            <span className="text-[#e6e6e6]">{formatPrice(globalCues.dow.price)}</span>
-            <span className={`flex items-center ${globalCues.dow.changePercent >= 0 ? 'text-[#00e5a0]' : 'text-[#ff3a3a]'}`}>
+            <span className="text-[#e6e6e6]" style={globalCues.dow.status === 'MOCK' ? { fontStyle: 'italic' } : undefined}>{formatPrice(globalCues.dow.price)}</span>
+            <span className={`flex items-center ${globalCues.dow.changePercent >= 0 ? 'text-[#00e5a0]' : 'text-[#ff3a3a]'}`} style={globalCues.dow.status === 'MOCK' ? { fontStyle: 'italic' } : undefined}>
               {globalCues.dow.changePercent >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
               {globalCues.dow.changePercent.toFixed(2)}%
             </span>
-            {renderStatusIndicator(globalCues.dow.status)}
+            {renderIndicator(globalCues.dow.status)}
           </div>
           {renderTooltip('dow', `US markets standard benchmark close. Indicates general overnight risk sentiment.`)}
         </div>
@@ -90,12 +94,12 @@ export function GlobalContextBar({ data }: GlobalContextBarProps) {
         >
           <div className="text-[9px] text-[#8892a4]">NASDAQ</div>
           <div className="flex items-center space-x-1">
-            <span className="text-[#e6e6e6]">{formatPrice(globalCues.nasdaq.price)}</span>
-            <span className={`flex items-center ${globalCues.nasdaq.changePercent >= 0 ? 'text-[#00e5a0]' : 'text-[#ff3a3a]'}`}>
+            <span className="text-[#e6e6e6]" style={globalCues.nasdaq.status === 'MOCK' ? { fontStyle: 'italic' } : undefined}>{formatPrice(globalCues.nasdaq.price)}</span>
+            <span className={`flex items-center ${globalCues.nasdaq.changePercent >= 0 ? 'text-[#00e5a0]' : 'text-[#ff3a3a]'}`} style={globalCues.nasdaq.status === 'MOCK' ? { fontStyle: 'italic' } : undefined}>
               {globalCues.nasdaq.changePercent >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
               {globalCues.nasdaq.changePercent.toFixed(2)}%
             </span>
-            {renderStatusIndicator(globalCues.nasdaq.status)}
+            {renderIndicator(globalCues.nasdaq.status)}
           </div>
           {renderTooltip('nasdaq', `US tech index close. Drives Indian IT stock flows (TCS, Infosys, Wipro).`)}
         </div>
@@ -108,12 +112,12 @@ export function GlobalContextBar({ data }: GlobalContextBarProps) {
         >
           <div className="text-[9px] text-[#8892a4]">NIKKEI 225</div>
           <div className="flex items-center space-x-1">
-            <span className="text-[#e6e6e6]">{formatPrice(globalCues.nikkei.price)}</span>
-            <span className={`flex items-center ${globalCues.nikkei.changePercent >= 0 ? 'text-[#00e5a0]' : 'text-[#ff3a3a]'}`}>
+            <span className="text-[#e6e6e6]" style={globalCues.nikkei.status === 'MOCK' ? { fontStyle: 'italic' } : undefined}>{formatPrice(globalCues.nikkei.price)}</span>
+            <span className={`flex items-center ${globalCues.nikkei.changePercent >= 0 ? 'text-[#00e5a0]' : 'text-[#ff3a3a]'}`} style={globalCues.nikkei.status === 'MOCK' ? { fontStyle: 'italic' } : undefined}>
               {globalCues.nikkei.changePercent >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
               {globalCues.nikkei.changePercent.toFixed(2)}%
             </span>
-            {renderStatusIndicator(globalCues.nikkei.status)}
+            {renderIndicator(globalCues.nikkei.status)}
           </div>
           {renderTooltip('nikkei', `Japan's stock index. Primary early morning Asian macro cue.`)}
         </div>
@@ -126,12 +130,12 @@ export function GlobalContextBar({ data }: GlobalContextBarProps) {
         >
           <div className="text-[9px] text-[#8892a4]">BRENT CRUDE</div>
           <div className="flex items-center space-x-1">
-            <span className="text-[#f0a500]">${commodities.crude.price.toFixed(2)}</span>
-            <span className={`flex items-center ${commodities.crude.changePercent <= 0 ? 'text-[#00e5a0]' : 'text-[#ff3a3a]'}`}>
+            <span className="text-[#f0a500]" style={commodities.crude.status === 'MOCK' ? { fontStyle: 'italic' } : undefined}>${commodities.crude.price.toFixed(2)}</span>
+            <span className={`flex items-center ${commodities.crude.changePercent <= 0 ? 'text-[#00e5a0]' : 'text-[#ff3a3a]'}`} style={commodities.crude.status === 'MOCK' ? { fontStyle: 'italic' } : undefined}>
               {commodities.crude.changePercent <= 0 ? <ArrowDownRight className="w-3 h-3" /> : <ArrowUpRight className="w-3 h-3" />}
               {commodities.crude.changePercent.toFixed(2)}%
             </span>
-            {renderStatusIndicator(commodities.crude.status)}
+            {renderIndicator(commodities.crude.status)}
           </div>
           {renderTooltip('crude', `Brent crude prices. Lower is bullish for India (import-dependent economy).`)}
         </div>
@@ -144,11 +148,11 @@ export function GlobalContextBar({ data }: GlobalContextBarProps) {
         >
           <div className="text-[9px] text-[#8892a4]">USD / INR</div>
           <div className="flex items-center space-x-1">
-            <span className="text-[#e6e6e6]">₹{commodities.usdinr.price.toFixed(2)}</span>
-            <span className={commodities.usdinr.change <= 0 ? 'text-[#00e5a0]' : 'text-[#ff3a3a]'}>
+            <span className="text-[#e6e6e6]" style={commodities.usdinr.status === 'MOCK' ? { fontStyle: 'italic' } : undefined}>₹{commodities.usdinr.price.toFixed(2)}</span>
+            <span className={commodities.usdinr.change <= 0 ? 'text-[#00e5a0]' : 'text-[#ff3a3a]'} style={commodities.usdinr.status === 'MOCK' ? { fontStyle: 'italic' } : undefined}>
               {commodities.usdinr.change >= 0 ? '+' : ''}{commodities.usdinr.change.toFixed(2)}
             </span>
-            {renderStatusIndicator(commodities.usdinr.status)}
+            {renderIndicator(commodities.usdinr.status)}
           </div>
           {renderTooltip('usdinr', `US Dollar to Indian Rupee. Rising rates trigger FII outflows from domestic equities.`)}
         </div>
