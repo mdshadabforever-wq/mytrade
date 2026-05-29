@@ -50,6 +50,7 @@ export default function NexusAlphaTerminal() {
   const [newsData, setNewsData] = useState<any>(null);
   const [regimeData, setRegimeData] = useState<any>(null);
   const [optionChainData, setOptionChainData] = useState<any>(null);
+  const [participantOI, setParticipantOI] = useState<any>(null);
 
   // Local computed metrics
   const [smcSignals, setSmcSignals] = useState<any[]>([]);
@@ -126,6 +127,21 @@ export default function NexusAlphaTerminal() {
   const [isReplayMode, setIsReplayMode] = useState(false);
   const [replayIndex, setReplayIndex] = useState(5);
   const [replayPlaying, setReplayPlaying] = useState(false);
+
+  // Participant-wise F&O OI — fetch on mount, refresh every 30 min
+  useEffect(() => {
+    const fetchParticipantOI = async () => {
+      try {
+        const res = await axios.get('/api/participant-oi');
+        if (res.data?.fii) setParticipantOI(res.data);
+      } catch (err) {
+        console.warn('[PARTICIPANT OI FETCH ERROR]', err);
+      }
+    };
+    fetchParticipantOI();
+    const oiTimer = window.setInterval(fetchParticipantOI, 30 * 60 * 1000);
+    return () => window.clearInterval(oiTimer);
+  }, []);
 
   // Timeout fallback for Market Regime Agent
   useEffect(() => {
@@ -503,7 +519,12 @@ export default function NexusAlphaTerminal() {
         institutional: {
           fiiCash: institutional?.fii?.cash || 0,
           diiCash: institutional?.dii?.cash || 0,
-          fiiDirection: (institutional?.fii?.cash > 1000 ? 'BUYING' : institutional?.fii?.cash < -1000 ? 'SELLING' : 'NEUTRAL') as any,
+          // Augment cash-flow direction with F&O OI participant bias when available
+          fiiDirection: (participantOI?.fii?.direction === 'LONG'
+            ? 'BUYING'
+            : participantOI?.fii?.direction === 'SHORT'
+            ? 'SELLING'
+            : institutional?.fii?.cash > 1000 ? 'BUYING' : institutional?.fii?.cash < -1000 ? 'SELLING' : 'NEUTRAL') as any,
           diiDirection: (institutional?.dii?.cash > 1000 ? 'BUYING' : institutional?.dii?.cash < -1000 ? 'SELLING' : 'NEUTRAL') as any
         },
         options: {
@@ -1404,6 +1425,51 @@ export default function NexusAlphaTerminal() {
             <NewsPanel 
               newsData={newsData} 
             />
+
+            {/* Participant-wise F&O OI Panel */}
+            <div className="bg-[#0d1117] border border-[#21262d] p-3 rounded font-mono select-none">
+              <div className="flex items-center space-x-2 border-b border-[#21262d] pb-2 mb-3">
+                <Landmark className="w-4 h-4 text-[#f0a500]" />
+                <span className="text-xs font-bold text-[#e6e6e6] uppercase">F&amp;O Participant OI</span>
+                <span className="text-[8px] text-[#8892a4]">(EOD NSE)</span>
+                {participantOI?.source === 'LIVE' && (
+                  <span className="ml-auto text-[7px] px-1 bg-[#00e5a0]/10 text-[#00e5a0] border border-[#00e5a0]/20 rounded uppercase font-bold">LIVE</span>
+                )}
+                {(!participantOI || participantOI?.source === 'MOCK') && (
+                  <span className="ml-auto text-[7px] px-1 bg-[#f0a500]/10 text-[#f0a500] border border-[#f0a500]/20 rounded uppercase font-bold">MOCK</span>
+                )}
+              </div>
+
+              {participantOI ? (
+                <div className="flex flex-col space-y-1.5">
+                  {[
+                    { label: 'FII', data: participantOI.fii },
+                    { label: 'DII', data: participantOI.dii },
+                    { label: 'PRO', data: participantOI.pro },
+                    { label: 'RETAIL', data: participantOI.retail }
+                  ].map(({ label, data }) => (
+                    <div key={label} className="flex items-center justify-between bg-[#050508] border border-[#21262d] px-2.5 py-1.5 rounded">
+                      <span className="text-[9px] font-bold text-[#8892a4] w-12">{label}</span>
+                      <span className="text-[9px] font-mono text-white flex-1 text-center">
+                        {data?.netOI >= 0 ? '+' : ''}{(data?.netOI ?? 0).toLocaleString()} contracts
+                      </span>
+                      <span className={`text-[8px] font-black px-1.5 py-0.5 rounded ${
+                        data?.direction === 'LONG'
+                          ? 'bg-[#00e5a0]/10 text-[#00e5a0] border border-[#00e5a0]/25'
+                          : data?.direction === 'SHORT'
+                          ? 'bg-[#ff3a3a]/10 text-[#ff3a3a] border border-[#ff3a3a]/25'
+                          : 'bg-[#21262d] text-[#8892a4] border border-[#21262d]'
+                      }`}>
+                        {data?.direction ?? 'NEUTRAL'}
+                      </span>
+                    </div>
+                  ))}
+                  <div className="text-[7px] text-[#8892a4] mt-1 font-sans">Date: {participantOI.date}</div>
+                </div>
+              ) : (
+                <div className="text-[9px] text-[#8892a4] animate-pulse">FETCHING PARTICIPANT OI DATA...</div>
+              )}
+            </div>
 
             {/* Technical Diagnostics Terminal */}
             <div className="bg-[#0d1117] border border-[#21262d] p-3 rounded font-mono select-none text-[10.5px]">

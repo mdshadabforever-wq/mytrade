@@ -63,6 +63,11 @@ export function calculateConfluence(data: {
     volumePercentOfAverage?: number;
     sectorDispersion: { strongestChange: number; weakestChange: number };
   };
+  // Optional: Participant-wise F&O OI bonus/penalty
+  participantOI?: {
+    fii?: { direction: 'LONG' | 'SHORT' | 'NEUTRAL' };
+    [key: string]: any;
+  };
 }): ConvictionResult {
   
   // 1. Evaluate Layer 5: Risk & Overrides (Deterministic No-Trade)
@@ -129,6 +134,15 @@ export function calculateConfluence(data: {
     instScore = 15;
     instSignal = 'NEUTRAL';
     instReason = 'One-sided institutional support.';
+  }
+
+  // Participant OI bonus/penalty: FII F&O positioning adds ±5 to Layer 2, capped at 25
+  if (data.participantOI?.fii?.direction === 'LONG') {
+    instScore = Math.min(25, instScore + 5);
+    instReason += ' FII F&O net long position reinforces bullish bias.';
+  } else if (data.participantOI?.fii?.direction === 'SHORT') {
+    instScore = Math.max(0, instScore - 5);
+    instReason += ' FII F&O net short position adds bearish weight.';
   }
 
   // Layer 3 (Options, weight 25)
