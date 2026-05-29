@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { fetchParticipantOI } from '@/lib/data-sources/participant-oi';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const data = await fetchParticipantOI();

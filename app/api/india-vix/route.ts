@@ -3,6 +3,8 @@ import { cacheGet, cacheSet } from '@/lib/cache';
 import { fetchYFinanceQuote } from '@/lib/data-sources/yfinance-client';
 import { generateMockData } from '@/lib/data-sources/mock-data';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   const cacheKey = 'nifty_india_vix_5layer';
 

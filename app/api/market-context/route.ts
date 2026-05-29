@@ -3,6 +3,8 @@ import { cacheGet, cacheSet } from '@/lib/cache';
 import { getMarketContext } from '@/lib/market-context';
 import { fetchYFinanceQuote } from '@/lib/data-sources/yfinance-client';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   const cacheKey = 'nifty_market_context_5layer';
 

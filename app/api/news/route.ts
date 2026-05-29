@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { cacheGet, cacheSet } from '@/lib/cache';
 import { getNewsIntelligence } from '@/lib/news-fetcher';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   const cacheKey = 'nifty_news_intelligence_5layer';
 

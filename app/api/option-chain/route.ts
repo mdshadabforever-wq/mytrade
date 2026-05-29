@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { cacheGet, cacheSet } from '@/lib/cache';
 import { getOptionIntelligence } from '@/lib/option-intelligence';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   const cacheKey = 'nifty_option_chain_5layer';
 
