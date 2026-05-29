@@ -51,6 +51,8 @@ export default function NexusAlphaTerminal() {
   const [regimeData, setRegimeData] = useState<any>(null);
   const [optionChainData, setOptionChainData] = useState<any>(null);
   const [participantOI, setParticipantOI] = useState<any>(null);
+  const [globalCues, setGlobalCues] = useState<any>(null);
+  const [commodities, setCommodities] = useState<any>(null);
 
   // Local computed metrics
   const [smcSignals, setSmcSignals] = useState<any[]>([]);
@@ -443,7 +445,7 @@ export default function NexusAlphaTerminal() {
       const optionChain = optionChainRes.data ?? null;
 
       // Extract context details
-      const { giftNifty: gift, institutional: inst, vix, sectors, stocks, regime } = context;
+      const { giftNifty: gift, institutional: inst, vix, sectors, stocks, regime, globalCues: gc, commodities: comms } = context;
 
       setCandlesData(candles);
       setGiftNifty(gift);
@@ -454,6 +456,8 @@ export default function NexusAlphaTerminal() {
       setNewsData(news);
       setRegimeData(regime);
       setOptionChainData(optionChain);
+      setGlobalCues(gc || null);
+      setCommodities(comms || null);
       setError(null);
       setLastUpdated(new Date().toLocaleTimeString('en-US', { hour12: false }));
 
@@ -940,14 +944,14 @@ export default function NexusAlphaTerminal() {
       <GlobalContextBar 
         data={loading && isInitialFetch.current ? null : { 
           marketContext: {
-            globalCues: {
+            globalCues: globalCues || {
               dow: { price: 39850, changePercent: 0.15 },
               sp500: { price: 5320, changePercent: 0.22 },
               nasdaq: { price: 18650, changePercent: 0.35 },
               nikkei: { price: 38700, changePercent: 0.45 },
               hangseng: { price: 18150, changePercent: -0.12 }
             },
-            commodities: {
+            commodities: commodities || {
               crude: { price: 81.8, changePercent: -0.4 },
               gold: { price: 2345.5, changePercent: 0.12 },
               usdinr: { price: 83.38, change: 0.04 },
