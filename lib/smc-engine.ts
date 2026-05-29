@@ -61,25 +61,188 @@ export interface SMCAnalysisResult {
   };
 }
 
-export function detectSMC(candles: Candle[], lookback: number = 2): SMCAnalysisResult {
+function getTimestamp(candle: Candle): number {
+  if (!candle || !candle.timestamp) return Date.now();
+  return typeof candle.timestamp === 'string'
+    ? new Date(candle.timestamp).getTime()
+    : (candle.timestamp instanceof Date ? candle.timestamp.getTime() : candle.timestamp as number);
+}
+
+/**
+ * 1. STANDALONE DETECTOR: detectOrderBlocks
+ */
+export function detectOrderBlocks(candles: Candle[]): SMCOrderBlock[] {
+  console.log(`[SMC DEBUG] detectOrderBlocks received ${candles?.length || 0} candles.`);
+  const orderBlocks: SMCOrderBlock[] = [];
   const n = candles.length;
-  if (n < 10) {
-    return {
-      trend: 'NEUTRAL',
-      swingHighs: [],
-      swingLows: [],
-      orderBlocks: [],
-      fairValueGaps: [],
-      sweeps: [],
-      signals: [],
-      premiumDiscount: { high: 0, low: 0, equilibrium: 0, currentZone: 'EQUILIBRIUM', discountPercent: 50 }
-    };
+  if (n < 10) return orderBlocks;
+
+  // Scan through candles to detect impulsive breakouts and set their base as Order Blocks
+  for (let i = 2; i < n; i++) {
+    const bodySize = Math.abs(candles[i].close - candles[i].open);
+    const prevBodySize = Math.abs(candles[i - 1].close - candles[i - 1].open);
+
+    // Reduced expansion threshold to 2x for MOCK data compatibility (as requested)
+    const isImpulsiveBullish = candles[i].close > candles[i].open && bodySize >= 2 * prevBodySize && bodySize >= 3;
+    const isImpulsiveBearish = candles[i].close < candles[i].open && bodySize >= 2 * prevBodySize && bodySize >= 3;
+
+    if (isImpulsiveBullish) {
+      let obIndex = i - 1;
+      if (candles[obIndex].close < candles[obIndex].open) {
+        const obCandle = candles[obIndex];
+        const isDuplicate = orderBlocks.some(ob => ob.candleIndex === obIndex && ob.type === 'BULLISH');
+        if (!isDuplicate) {
+          orderBlocks.push({
+            type: 'BULLISH',
+            high: obCandle.high,
+            low: obCandle.low,
+            timestamp: getTimestamp(obCandle),
+            candleIndex: obIndex,
+            isMitigated: false,
+            strength: 85
+          });
+        }
+      }
+    }
+
+    if (isImpulsiveBearish) {
+      let obIndex = i - 1;
+      if (candles[obIndex].close > candles[obIndex].open) {
+        const obCandle = candles[obIndex];
+        const isDuplicate = orderBlocks.some(ob => ob.candleIndex === obIndex && ob.type === 'BEARISH');
+        if (!isDuplicate) {
+          orderBlocks.push({
+            type: 'BEARISH',
+            high: obCandle.high,
+            low: obCandle.low,
+            timestamp: getTimestamp(obCandle),
+            candleIndex: obIndex,
+            isMitigated: false,
+            strength: 85
+          });
+        }
+      }
+    }
   }
 
+  // Trace Order Block mitigation checks across subsequent price actions
+  for (let i = 0; i < n; i++) {
+    const low = candles[i].low;
+    const high = candles[i].high;
+    const t = getTimestamp(candles[i]);
+    for (const ob of orderBlocks) {
+      if (ob.isMitigated || i <= ob.candleIndex) continue;
+      if (ob.type === 'BULLISH' && low <= ob.high) {
+        ob.isMitigated = true;
+        ob.mitigatedByTimestamp = t;
+      } else if (ob.type === 'BEARISH' && high >= ob.low) {
+        ob.isMitigated = true;
+        ob.mitigatedByTimestamp = t;
+      }
+    }
+  }
+
+  return orderBlocks;
+}
+
+/**
+ * 2. STANDALONE DETECTOR: detectFVG
+ */
+export function detectFVG(candles: Candle[]): SMCFairValueGap[] {
+  const fairValueGaps: SMCFairValueGap[] = [];
+  const n = candles.length;
+  if (n < 10) return fairValueGaps;
+
+  // Scan 3-candle structures for price imbalance gaps (minimum 3 points for MOCK)
+  for (let i = 0; i < n - 2; i++) {
+    const prev = candles[i];
+    const curr = candles[i + 1];
+    const next = candles[i + 2];
+    const t = getTimestamp(curr);
+
+    // Bullish FVG check: low of candle 3 is greater than high of candle 1 by at least 3 points
+    if (next.low - prev.high >= 3) {
+      fairValueGaps.push({
+        type: 'BULLISH',
+        top: next.low,
+        bottom: prev.high,
+        timestamp: t,
+        candleIndex: i + 1,
+        isFilled: false,
+        filledPercent: 0
+      });
+    }
+
+    // Bearish FVG check: high of candle 3 is less than low of candle 1 by at least 3 points
+    if (prev.low - next.high >= 3) {
+      fairValueGaps.push({
+        type: 'BEARISH',
+        top: prev.low,
+        bottom: next.high,
+        timestamp: t,
+        candleIndex: i + 1,
+        isFilled: false,
+        filledPercent: 0
+      });
+    }
+  }
+
+  // Trace FVG fill checks
+  for (let i = 0; i < n; i++) {
+    const low = candles[i].low;
+    const high = candles[i].high;
+    for (const fvg of fairValueGaps) {
+      if (fvg.isFilled || i <= fvg.candleIndex + 1) continue;
+      if (fvg.type === 'BULLISH') {
+        if (low <= fvg.bottom) {
+          fvg.isFilled = true;
+          fvg.filledPercent = 100;
+        } else if (low < fvg.top) {
+          const totalWidth = fvg.top - fvg.bottom;
+          const filledAmount = fvg.top - low;
+          const pct = Math.min(100, Math.round((filledAmount / totalWidth) * 100));
+          fvg.filledPercent = Math.max(fvg.filledPercent, pct);
+          if (fvg.filledPercent >= 95) fvg.isFilled = true;
+        }
+      } else {
+        if (high >= fvg.top) {
+          fvg.isFilled = true;
+          fvg.filledPercent = 100;
+        } else if (high > fvg.bottom) {
+          const totalWidth = fvg.top - fvg.bottom;
+          const filledAmount = high - fvg.bottom;
+          const pct = Math.min(100, Math.round((filledAmount / totalWidth) * 100));
+          fvg.filledPercent = Math.max(fvg.filledPercent, pct);
+          if (fvg.filledPercent >= 95) fvg.isFilled = true;
+        }
+      }
+    }
+  }
+
+  return fairValueGaps;
+}
+
+/**
+ * 3. STANDALONE DETECTOR: detectBOSandCHOCH
+ */
+export function detectBOSandCHOCH(
+  candles: Candle[],
+  lookback: number = 3
+): {
+  signals: SMCSignal[];
+  trend: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+  swingHighs: { index: number; price: number; timestamp: number }[];
+  swingLows: { index: number; price: number; timestamp: number }[];
+} {
+  const n = candles.length;
+  const signals: SMCSignal[] = [];
+  let trend: 'BULLISH' | 'BEARISH' | 'NEUTRAL' = 'NEUTRAL';
   const swingHighs: { index: number; price: number; timestamp: number }[] = [];
   const swingLows: { index: number; price: number; timestamp: number }[] = [];
 
-  // 1. Detect Swing Highs and Swing Lows
+  if (n < 10) return { signals, trend, swingHighs, swingLows };
+
+  // Detect Swing Highs and Swing Lows with lookback of 3 candles each side
   for (let i = lookback; i < n - lookback; i++) {
     const currentHigh = candles[i].high;
     const currentLow = candles[i].low;
@@ -96,79 +259,49 @@ export function detectSMC(candles: Candle[], lookback: number = 2): SMCAnalysisR
       }
     }
 
-    const t = typeof candles[i].timestamp === 'string' 
-      ? new Date(candles[i].timestamp).getTime() 
-      : (candles[i].timestamp instanceof Date ? (candles[i].timestamp as Date).getTime() : candles[i].timestamp as number);
+    const t = getTimestamp(candles[i]);
 
-    if (isSwingHigh) {
-      swingHighs.push({ index: i, price: currentHigh, timestamp: t });
-    }
-    if (isSwingLow) {
-      swingLows.push({ index: i, price: currentLow, timestamp: t });
+    if (isSwingHigh) swingHighs.push({ index: i, price: currentHigh, timestamp: t });
+    if (isSwingLow) swingLows.push({ index: i, price: currentLow, timestamp: t });
+  }
+
+  // Check if swing arrays have enough points (need 4+ swings combined, otherwise fall back to lookback 2)
+  if (swingHighs.length + swingLows.length < 4) {
+    swingHighs.length = 0;
+    swingLows.length = 0;
+    const altLookback = 2;
+    for (let i = altLookback; i < n - altLookback; i++) {
+      const currentHigh = candles[i].high;
+      const currentLow = candles[i].low;
+      let isSwingHigh = true;
+      let isSwingLow = true;
+      for (let j = 1; j <= altLookback; j++) {
+        if (candles[i - j].high >= currentHigh || candles[i + j].high > currentHigh) isSwingHigh = false;
+        if (candles[i - j].low <= currentLow || candles[i + j].low < currentLow) isSwingLow = false;
+      }
+      const t = getTimestamp(candles[i]);
+      if (isSwingHigh) swingHighs.push({ index: i, price: currentHigh, timestamp: t });
+      if (isSwingLow) swingLows.push({ index: i, price: currentLow, timestamp: t });
     }
   }
 
-  // 2. Market Structure (BOS / CHOCH) and Order Blocks (OB)
-  const orderBlocks: SMCOrderBlock[] = [];
-  const signals: SMCSignal[] = [];
-  let currentTrend: 'BULLISH' | 'BEARISH' | 'NEUTRAL' = 'NEUTRAL';
-
-  // We walk through candles from lookback onwards to dynamically trace BOS and CHOCH
+  // Trace BOS and CHOCH breakouts
   let lastSwingHigh = swingHighs.length > 0 ? swingHighs[0] : null;
   let lastSwingLow = swingLows.length > 0 ? swingLows[0] : null;
 
-  for (let i = lookback + 1; i < n; i++) {
-    const candle = candles[i];
-    const prevCandle = candles[i - 1];
-    const close = candle.close;
-    const t = typeof candle.timestamp === 'string' 
-      ? new Date(candle.timestamp).getTime() 
-      : (candle.timestamp instanceof Date ? (candle.timestamp as Date).getTime() : candle.timestamp as number);
+  for (let i = 2; i < n; i++) {
+    const close = candles[i].close;
+    const t = getTimestamp(candles[i]);
 
-    // Update swing points if we reached their indexes
-    const foundHigh = swingHighs.find(sh => sh.index === i - lookback);
+    const foundHigh = swingHighs.find(sh => sh.index === i - 2);
     if (foundHigh) lastSwingHigh = foundHigh;
 
-    const foundLow = swingLows.find(sl => sl.index === i - lookback);
+    const foundLow = swingLows.find(sl => sl.index === i - 2);
     if (foundLow) lastSwingLow = foundLow;
 
-    // BULLISH Breakout: Candle closes above the most recent Swing High
     if (lastSwingHigh && close > lastSwingHigh.price) {
-      const type = currentTrend === 'BEARISH' ? 'CHOCH' : 'BOS';
-      currentTrend = 'BULLISH';
-
-      // Find Order Block: The last bearish candle before this breakout move
-      // Walk backward to find the last candle where close < open
-      let obIndex = -1;
-      for (let k = i; k > lastSwingHigh.index; k--) {
-        if (candles[k].close < candles[k].open) {
-          obIndex = k;
-          break;
-        }
-      }
-      if (obIndex === -1 && lastSwingHigh.index > 0) {
-        obIndex = lastSwingHigh.index - 1; // Fallback to swing high source
-      }
-
-      if (obIndex !== -1 && obIndex < i) {
-        const obCandle = candles[obIndex];
-        const expansionVolume = candles.slice(obIndex, i + 1).reduce((acc, c) => acc + c.volume, 0);
-        const strength = Math.min(100, Math.round((candles[i].close - obCandle.low) / (obCandle.high - obCandle.low) * 15 + expansionVolume / 100000));
-
-        const isDuplicate = orderBlocks.some(ob => ob.candleIndex === obIndex && ob.type === 'BULLISH');
-        if (!isDuplicate) {
-          orderBlocks.push({
-            type: 'BULLISH',
-            high: obCandle.high,
-            low: obCandle.low,
-            timestamp: typeof obCandle.timestamp === 'string' ? new Date(obCandle.timestamp).getTime() : (obCandle.timestamp instanceof Date ? obCandle.timestamp.getTime() : obCandle.timestamp as number),
-            candleIndex: obIndex,
-            isMitigated: false,
-            strength
-          });
-        }
-      }
-
+      const type = trend === 'BEARISH' ? 'CHOCH' : 'BOS';
+      trend = 'BULLISH';
       signals.push({
         type,
         zone: [lastSwingHigh.price, lastSwingHigh.price * 1.0005],
@@ -176,47 +309,12 @@ export function detectSMC(candles: Candle[], lookback: number = 2): SMCAnalysisR
         timestamp: t,
         description: `Bullish ${type} via close above Swing High (${lastSwingHigh.price.toFixed(1)})`
       });
-
-      // Clear last swing high to prevent duplicate breakout detection from the same swing point
       lastSwingHigh = null;
     }
 
-    // BEARISH Breakout: Candle closes below the most recent Swing Low
     if (lastSwingLow && close < lastSwingLow.price) {
-      const type = currentTrend === 'BULLISH' ? 'CHOCH' : 'BOS';
-      currentTrend = 'BEARISH';
-
-      // Find Bearish Order Block: Last bullish candle before this breakout move
-      let obIndex = -1;
-      for (let k = i; k > lastSwingLow.index; k--) {
-        if (candles[k].close > candles[k].open) {
-          obIndex = k;
-          break;
-        }
-      }
-      if (obIndex === -1 && lastSwingLow.index > 0) {
-        obIndex = lastSwingLow.index - 1;
-      }
-
-      if (obIndex !== -1 && obIndex < i) {
-        const obCandle = candles[obIndex];
-        const expansionVolume = candles.slice(obIndex, i + 1).reduce((acc, c) => acc + c.volume, 0);
-        const strength = Math.min(100, Math.round((obCandle.high - candles[i].close) / (obCandle.high - obCandle.low) * 15 + expansionVolume / 100000));
-
-        const isDuplicate = orderBlocks.some(ob => ob.candleIndex === obIndex && ob.type === 'BEARISH');
-        if (!isDuplicate) {
-          orderBlocks.push({
-            type: 'BEARISH',
-            high: obCandle.high,
-            low: obCandle.low,
-            timestamp: typeof obCandle.timestamp === 'string' ? new Date(obCandle.timestamp).getTime() : (obCandle.timestamp instanceof Date ? obCandle.timestamp.getTime() : obCandle.timestamp as number),
-            candleIndex: obIndex,
-            isMitigated: false,
-            strength
-          });
-        }
-      }
-
+      const type = trend === 'BULLISH' ? 'CHOCH' : 'BOS';
+      trend = 'BEARISH';
       signals.push({
         type,
         zone: [lastSwingLow.price * 0.9995, lastSwingLow.price],
@@ -224,111 +322,56 @@ export function detectSMC(candles: Candle[], lookback: number = 2): SMCAnalysisR
         timestamp: t,
         description: `Bearish ${type} via close below Swing Low (${lastSwingLow.price.toFixed(1)})`
       });
-
       lastSwingLow = null;
     }
   }
 
-  // 3. Fair Value Gaps (FVG)
-  const fairValueGaps: SMCFairValueGap[] = [];
-  for (let i = 1; i < n - 1; i++) {
-    const prev = candles[i - 1];
-    const curr = candles[i];
-    const next = candles[i + 1];
+  return { signals, trend, swingHighs, swingLows };
+}
 
-    const t = typeof curr.timestamp === 'string' 
-      ? new Date(curr.timestamp).getTime() 
-      : (curr.timestamp instanceof Date ? curr.timestamp.getTime() : curr.timestamp as number);
-
-    // Bullish FVG: Low of candle 3 is greater than High of candle 1
-    if (next.low > prev.high) {
-      // Gap range: prev.high to next.low
-      fairValueGaps.push({
-        type: 'BULLISH',
-        top: next.low,
-        bottom: prev.high,
-        timestamp: t,
-        candleIndex: i,
-        isFilled: false,
-        filledPercent: 0
-      });
-    }
-
-    // Bearish FVG: High of candle 3 is less than Low of candle 1
-    if (next.high < prev.low) {
-      // Gap range: next.high to prev.low
-      fairValueGaps.push({
-        type: 'BEARISH',
-        top: prev.low,
-        bottom: next.high,
-        timestamp: t,
-        candleIndex: i,
-        isFilled: false,
-        filledPercent: 0
-      });
-    }
+/**
+ * Main Scopes Orchestrator: detectSMC
+ */
+export function detectSMC(candles: Candle[], lookback: number = 2): SMCAnalysisResult {
+  if (!candles || !Array.isArray(candles)) {
+    return {
+      trend: 'NEUTRAL',
+      swingHighs: [],
+      swingLows: [],
+      orderBlocks: [],
+      fairValueGaps: [],
+      sweeps: [],
+      signals: [],
+      premiumDiscount: { high: 0, low: 0, equilibrium: 0, currentZone: 'EQUILIBRIUM', discountPercent: 50 }
+    };
   }
 
-  // 4. Trace mitigation and filling
-  for (let i = 0; i < n; i++) {
-    const candle = candles[i];
-    const high = candle.high;
-    const low = candle.low;
-    const t = typeof candle.timestamp === 'string' 
-      ? new Date(candle.timestamp).getTime() 
-      : (candle.timestamp instanceof Date ? candle.timestamp.getTime() : candle.timestamp as number);
-
-    // Order Block mitigation checks
-    for (const ob of orderBlocks) {
-      if (ob.isMitigated || i <= ob.candleIndex) continue;
-
-      if (ob.type === 'BULLISH' && low <= ob.high) {
-        ob.isMitigated = true;
-        ob.mitigatedByTimestamp = t;
-      } else if (ob.type === 'BEARISH' && high >= ob.low) {
-        ob.isMitigated = true;
-        ob.mitigatedByTimestamp = t;
-      }
-    }
-
-    // FVG fill checks
-    for (const fvg of fairValueGaps) {
-      if (fvg.isFilled || i <= fvg.candleIndex + 1) continue;
-
-      if (fvg.type === 'BULLISH') {
-        // If price touches bottom of bullish FVG, it is completely filled
-        if (low <= fvg.bottom) {
-          fvg.isFilled = true;
-          fvg.filledPercent = 100;
-        } else if (low < fvg.top) {
-          // Partially filled
-          const totalWidth = fvg.top - fvg.bottom;
-          const filledAmount = fvg.top - low;
-          const pct = Math.min(100, Math.round((filledAmount / totalWidth) * 100));
-          fvg.filledPercent = Math.max(fvg.filledPercent, pct);
-          if (fvg.filledPercent >= 95) fvg.isFilled = true;
-        }
-      } else {
-        // Bearish FVG
-        if (high >= fvg.top) {
-          fvg.isFilled = true;
-          fvg.filledPercent = 100;
-        } else if (high > fvg.bottom) {
-          const totalWidth = fvg.top - fvg.bottom;
-          const filledAmount = high - fvg.bottom;
-          const pct = Math.min(100, Math.round((filledAmount / totalWidth) * 100));
-          fvg.filledPercent = Math.max(fvg.filledPercent, pct);
-          if (fvg.filledPercent >= 95) fvg.isFilled = true;
-        }
-      }
-    }
+  const n = candles.length;
+  if (n < 10) {
+    return {
+      trend: 'NEUTRAL',
+      swingHighs: [],
+      swingLows: [],
+      orderBlocks: [],
+      fairValueGaps: [],
+      sweeps: [],
+      signals: [],
+      premiumDiscount: { high: 0, low: 0, equilibrium: 0, currentZone: 'EQUILIBRIUM', discountPercent: 50 }
+    };
   }
 
-  // 5. Liquidity sweeps (BSL / SSL sweeps)
-  // Check the last 15 candles for wick sweep of recently established swing points
+  // 1. Run standalone modular detections
+  const orderBlocks = detectOrderBlocks(candles);
+  const fairValueGaps = detectFVG(candles);
+  const { signals: structSignals, trend, swingHighs, swingLows } = detectBOSandCHOCH(candles, 3);
+
+  // 2. Liquidity sweeps (BSL / SSL sweeps) using the tracked swing highs and lows
   const sweeps: SMCSweep[] = [];
   const recentHighs = swingHighs.slice(-5);
   const recentLows = swingLows.slice(-5);
+  const sweptHighs = new Set<number>();
+  const sweptLows = new Set<number>();
+  const sweepSignals: SMCSignal[] = [];
 
   for (let i = n - 15; i < n; i++) {
     if (i < 0) continue;
@@ -337,13 +380,13 @@ export function detectSMC(candles: Candle[], lookback: number = 2): SMCAnalysisR
     const low = candle.low;
     const close = candle.close;
     const open = candle.open;
-    const t = typeof candle.timestamp === 'string' 
-      ? new Date(candle.timestamp).getTime() 
-      : (candle.timestamp instanceof Date ? candle.timestamp.getTime() : candle.timestamp as number);
+    const t = getTimestamp(candle);
 
     // BSL sweep: High penetrates recent swing high but close is below it
     for (const sh of recentHighs) {
+      if (sweptHighs.has(sh.index)) continue;
       if (i > sh.index && high > sh.price && close < sh.price && open < sh.price) {
+        sweptHighs.add(sh.index);
         sweeps.push({
           type: 'BSL',
           sweepPrice: high,
@@ -352,7 +395,7 @@ export function detectSMC(candles: Candle[], lookback: number = 2): SMCAnalysisR
           strength: Math.round((high - Math.max(open, close)) / (high - low) * 100)
         });
         
-        signals.push({
+        sweepSignals.push({
           type: 'BSL_SWEEP',
           zone: [sh.price, high],
           strength: 75,
@@ -364,7 +407,9 @@ export function detectSMC(candles: Candle[], lookback: number = 2): SMCAnalysisR
 
     // SSL sweep: Low penetrates recent swing low but close is above it
     for (const sl of recentLows) {
+      if (sweptLows.has(sl.index)) continue;
       if (i > sl.index && low < sl.price && close > sl.price && open > sl.price) {
+        sweptLows.add(sl.index);
         sweeps.push({
           type: 'SSL',
           sweepPrice: low,
@@ -373,7 +418,7 @@ export function detectSMC(candles: Candle[], lookback: number = 2): SMCAnalysisR
           strength: Math.round((Math.min(open, close) - low) / (high - low) * 100)
         });
 
-        signals.push({
+        sweepSignals.push({
           type: 'SSL_SWEEP',
           zone: [low, sl.price],
           strength: 75,
@@ -384,8 +429,7 @@ export function detectSMC(candles: Candle[], lookback: number = 2): SMCAnalysisR
     }
   }
 
-  // 6. Premium vs Discount zones
-  // Find highest high and lowest low of last 30 candles
+  // 3. Premium vs Discount zones
   let rangeHigh = -Infinity;
   let rangeLow = Infinity;
   const rangeLookback = Math.min(30, n);
@@ -406,12 +450,21 @@ export function detectSMC(candles: Candle[], lookback: number = 2): SMCAnalysisR
 
   const discountPercent = Math.min(100, Math.max(0, Math.round(((rangeHigh - currentPrice) / (rangeHigh - rangeLow)) * 100)));
 
-  // Convert unmitigated OBs and unfilled FVGs to standard signals for rendering/alerts
+  // Combine all signals together
+  const allSignals: SMCSignal[] = [];
+
+  // Add structural signals (BOS/CHOCH)
+  structSignals.forEach(s => allSignals.push(s));
+
+  // Add sweep signals
+  sweepSignals.forEach(s => allSignals.push(s));
+
+  // Convert unmitigated OBs and unfilled FVGs to standard signals for rendering
   const activeUnmitigatedOBs = orderBlocks.filter(ob => !ob.isMitigated);
   const activeUnfilledFVGs = fairValueGaps.filter(fvg => !fvg.isFilled && fvg.filledPercent < 50);
 
   activeUnmitigatedOBs.forEach(ob => {
-    signals.push({
+    allSignals.push({
       type: ob.type === 'BULLISH' ? 'BULLISH_OB' : 'BEARISH_OB',
       zone: [ob.low, ob.high],
       strength: ob.strength,
@@ -421,7 +474,7 @@ export function detectSMC(candles: Candle[], lookback: number = 2): SMCAnalysisR
   });
 
   activeUnfilledFVGs.forEach(fvg => {
-    signals.push({
+    allSignals.push({
       type: fvg.type === 'BULLISH' ? 'BULLISH_FVG' : 'BEARISH_FVG',
       zone: [fvg.bottom, fvg.top],
       strength: 60,
@@ -430,20 +483,13 @@ export function detectSMC(candles: Candle[], lookback: number = 2): SMCAnalysisR
     });
   });
 
-  // Trend detection based on recent BOS / CHOCH direction
-  const recentTrendSignals = signals.filter(s => s.type === 'BOS' || s.type === 'CHOCH').slice(-3);
-  if (recentTrendSignals.length > 0) {
-    const lastSig = recentTrendSignals[recentTrendSignals.length - 1];
-    currentTrend = lastSig.description.includes('Bullish') ? 'BULLISH' : 'BEARISH';
-  }
-
   // Deduplicate and sort signals by timestamp desc
-  const uniqueSignals = signals.filter((sig, index, self) => 
+  const uniqueSignals = allSignals.filter((sig, index, self) => 
     index === self.findIndex(s => s.type === sig.type && s.timestamp === sig.timestamp && s.zone[0] === sig.zone[0])
   ).sort((a, b) => b.timestamp - a.timestamp);
 
   return {
-    trend: currentTrend,
+    trend,
     swingHighs,
     swingLows,
     orderBlocks,

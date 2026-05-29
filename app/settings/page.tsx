@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { 
   ArrowLeft, Save, Eye, EyeOff, Activity, ShieldAlert, CheckCircle, 
-  Sparkles, Key, Lock, Globe, Server, Database, LogOut, RefreshCw 
+  Sparkles, Key, Lock, Globe, Server, Database, LogOut, RefreshCw, Trash2
 } from 'lucide-react';
 
 interface HealthStatus {
@@ -62,6 +62,27 @@ export default function SettingsPanel() {
     kiteMcp: { status: 'IDLE', message: 'No connection test initiated.' },
     telegram: { status: 'IDLE', message: 'No connection test initiated.' },
   });
+
+  // Database cleanup states
+  const [cleanupMessage, setCleanupMessage] = useState('');
+
+  const handleDatabaseCleanup = async (action: string) => {
+    if (!confirm(`Are you sure you want to perform database operation: ${action.replace(/_/g, ' ').toUpperCase()}? This will delete records permanently.`)) {
+      return;
+    }
+    setCleanupMessage('Processing database purge...');
+    try {
+      const res = await axios.post('/api/settings/cleanup', { action });
+      if (res.data?.success) {
+        setCleanupMessage(res.data.message || 'Operation executed successfully.');
+        setTimeout(() => setCleanupMessage(''), 5000);
+      } else {
+        setCleanupMessage('Cleanup failed: ' + (res.data?.error || 'Unknown error'));
+      }
+    } catch (err: any) {
+      setCleanupMessage('Cleanup failed: ' + (err.response?.data?.error || err.message));
+    }
+  };
 
   // Global action loading indicators
   const [loading, setLoading] = useState(true);
@@ -157,7 +178,10 @@ export default function SettingsPanel() {
     }));
 
     const payload: any = { provider };
-    if (provider === 'anthropic') payload.anthropicKey = anthropicKey;
+    if (provider === 'anthropic') {
+      payload.anthropicKey = anthropicKey;
+      payload.anthropicModel = anthropicModel;
+    }
     else if (provider === 'kite') {
       payload.kiteApiKey = kiteApiKey;
       payload.kiteAccessToken = kiteAccessToken;
@@ -167,7 +191,10 @@ export default function SettingsPanel() {
       payload.dhanClientId = dhanClientId;
       payload.dhanToken = dhanToken;
     }
-    else if (provider === 'news') payload.newsApiKey = newsApiKey;
+    else if (provider === 'news') {
+      payload.newsApiKey = newsApiKey;
+      payload.newsProvider = newsProvider;
+    }
     else if (provider === 'supabase') {
       payload.supabaseUrl = supabaseUrl;
       payload.supabaseAnonKey = supabaseAnonKey;
@@ -354,6 +381,7 @@ export default function SettingsPanel() {
                     onChange={(e) => setAnthropicModel(e.target.value)}
                     className="w-full bg-[#050508] border border-[#21262d] p-2 rounded text-xs text-[#e6e6e6] focus:outline-none"
                   >
+                    <option value="claude-sonnet-4-6">Claude Sonnet 4-6 (High-Fidelity Quantitative Model)</option>
                     <option value="claude-3-opus-20240229">Claude 3 Opus (Recommended - Deep Intraday Analysis)</option>
                     <option value="claude-3-5-sonnet-20240620">Claude 3.5 Sonnet (Ultra-Fast Execution Scoring)</option>
                     <option value="claude-3-haiku-20240307">Claude 3 Haiku (Lightweight Fallback)</option>
@@ -516,6 +544,7 @@ export default function SettingsPanel() {
                     onChange={(e) => setNewsProvider(e.target.value)}
                     className="w-full bg-[#050508] border border-[#21262d] p-2 rounded text-xs text-[#e6e6e6] focus:outline-none"
                   >
+                    <option value="GOOGLE_NEWS">Google News India Feed (Zero Latency, Real-Time & Free)</option>
                     <option value="NEWS_API">NewsAPI.org (Global Business Headlines)</option>
                     <option value="BLOOMBERG_FEED">Bloomberg Professional Wire Feed (Mock)</option>
                     <option value="NSE_COMMUNICATION">NSE Exchange Press Disclosures Ticker</option>
@@ -795,6 +824,48 @@ export default function SettingsPanel() {
             </div>
           </div>
 
+        </div>
+
+        {/* CARD 9: DATABASE CLEANUP & CAPACITY SAFEGUARDS */}
+        <div className="bg-[#0d1117]/60 border border-[#21262d] p-4 rounded hover:border-[#ff3a3a]/25 transition-all duration-300 mt-6 relative z-20">
+          <div className="flex items-center space-x-2 border-b border-[#21262d] pb-2 mb-4">
+            <Trash2 className="w-4 h-4 text-[#ff3a3a]" />
+            <span className="text-xs font-bold text-white uppercase">9. DATABASE CAPACITY SAFEGUARDS (FREE-TIER OPTIMIZATION)</span>
+          </div>
+
+          <p className="text-[10px] text-[#8892a4] mb-4 leading-normal font-sans">
+            Supabase Free Tier limits storage space to 500 MB. To ensure database size remains well within the limit, use these clean-up tools to purge old logs periodically.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-[10px] font-bold font-mono">
+            <button
+              onClick={() => handleDatabaseCleanup('clear_alerts_old')}
+              className="px-3 py-2 bg-amber-500/10 border border-amber-500/35 hover:bg-amber-500/20 text-[#f0a500] rounded uppercase tracking-wider transition duration-300"
+            >
+              Purge Alerts &gt; 15 Days
+            </button>
+            <button
+              onClick={() => handleDatabaseCleanup('clear_alerts')}
+              className="px-3 py-2 bg-[#ff3a3a]/10 border border-[#ff3a3a]/35 hover:bg-[#ff3a3a]/20 text-[#ff3a3a] rounded uppercase tracking-wider transition duration-300"
+            >
+              Clear All Alerts
+            </button>
+            <button
+              onClick={() => handleDatabaseCleanup('clear_journal')}
+              className="px-3 py-2 bg-[#ff3a3a]/10 border border-[#ff3a3a]/35 hover:bg-[#ff3a3a]/20 text-[#ff3a3a] rounded uppercase tracking-wider transition duration-300"
+            >
+              Clear All Journals
+            </button>
+            <button
+              onClick={() => handleDatabaseCleanup('clear_reports')}
+              className="px-3 py-2 bg-[#ff3a3a]/10 border border-[#ff3a3a]/35 hover:bg-[#ff3a3a]/20 text-[#ff3a3a] rounded uppercase tracking-wider transition duration-300"
+            >
+              Clear All Reports
+            </button>
+          </div>
+          {cleanupMessage && (
+            <p className="text-[9px] text-[#00e5a0] mt-3 font-mono">{cleanupMessage}</p>
+          )}
         </div>
 
         {/* Action Controls Footer */}

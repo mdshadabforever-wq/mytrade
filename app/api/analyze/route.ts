@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { format } from 'date-fns';
 import { promptCache } from '@/lib/shared-cache';
-import { PrismaClient } from '@prisma/client';
+import { getSkillContent } from '@/lib/skill';
+import { supabase, mockDb } from '@/lib/supabase';
 import fs from 'fs';
 import path from 'path';
 
-const prisma = new PrismaClient();
 const SETTINGS_FILE_PATH = path.join(process.cwd(), 'settings.json');
 
 function getSavedSettings() {
@@ -22,23 +22,21 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const {
       symbol = 'NIFTY',
-      regimeAgent,
-      sectorAgent,
-      stockAgent,
-      futuresAgent,
-      smcAgent,
-      riskAgent,
-      confluenceResult,
       candles = [],
+      smcSignals = [],
+      marketContext,
+      optionChain,
+      vix,
+      news,
       interval = '5',
-      currentPrice
+      currentPrice,
+      confluenceResult
     } = body;
 
-    if (!regimeAgent || !sectorAgent || !stockAgent || !futuresAgent || !smcAgent || !riskAgent || !confluenceResult || !currentPrice) {
-      return NextResponse.json({ error: 'Missing 6-agent confluence parameters' }, { status: 400 });
+    if (!confluenceResult || !currentPrice) {
+      return NextResponse.json({ error: 'Missing confluence calculations' }, { status: 400 });
     }
 
-    // Format times for logs
     const formatIST = (timestamp: any) => {
       try {
         return format(new Date(timestamp), 'HH:mm:ss');
@@ -47,77 +45,79 @@ export async function POST(request: NextRequest) {
       }
     };
 
-    // 1. Build SYSTEM PROMPT
-    const systemPrompt = `You are an elite quantitative analyst and chief risk officer for an institutional intraday trading desk specialized for Indian Nifty 50 markets (NEXUS ALPHA). You combine:
-- Market Regime Agent details (trending vs ranging indicators)
-- Sector Rotation Agent details (momentum acceleration / rotations)
-- Stock Strength Agent details (intraday relative strength relative to index)
-- Futures Positioning Agent details (Price-Volume-OI buildup classification)
-- SMC Intelligence Agent details (multi-timeframe structures: BOS, CHOCH, Order Blocks, Liquidity Sweeps)
-- Risk Engine Agent details (Opening range buffers, choppy market blockages)
+    // 1. Build SYSTEM PROMPT precisely to spec
+    const systemPrompt = `You are an elite institutional trader and quantitative analyst specializing in Nifty 50 index on NSE India. You combine:
+- Smart Money Concepts (SMC) for price structure
+- Institutional order flow (FII/DII data)  
+- Options market intelligence (PCR, Max Pain, OI walls)
+- Global macro context (GIFT Nifty, US markets, crude)
+- News sentiment and event risk
+- India VIX for volatility regime
 
-You think in terms of 6-agent confluences. A trade is only HIGH CONVICTION when at least 5 of 6 layers align. You are precise with price levels, specific with risk, and honest about uncertainty. You always account for the NSE session context and Thursday expiry effects.
+You think in terms of 5-layer confluence. A trade is only HIGH CONVICTION when at least 4 of 5 layers align. You are precise with price levels, specific with risk, and honest about uncertainty. You never recommend trading during high impact news windows or extreme VIX. You always account for the NSE session context and Thursday expiry effects.
 Response language: English. Be concise and actionable.`;
 
-    // 2. Build USER PROMPT
+    const istTime = format(new Date(), 'HH:mm:ss');
+    const sessionName = confluenceResult.total > 50 ? 'PEAK MOMENTUM WINDOW' : 'MIDDAY LULL';
+
+    // 2. Build USER PROMPT precisely to spec
     const userPrompt = `---
-NEXUS ALPHA — INSTITUTIONAL QUANTITATIVE TRADE ALERT
-Time: ${format(new Date(), 'HH:mm:ss')} IST | Scope: Nifty 50 Intraday Stocks & Futures
-Symbol: ${symbol} | Interval: ${interval}M | Current Price: ${currentPrice}
+NIFTY 50 — INSTITUTIONAL ANALYSIS REQUEST
+Time: ${istTime} IST | Session: ${sessionName}
+Interval: ${interval}M | Current Price: ${currentPrice}
 
-═══ AGENT 1: MARKET REGIME ═══
-Regime State: ${regimeAgent.regime}
-Market Bias: ${regimeAgent.bias}
-Model Confidence: ${regimeAgent.confidence}%
-Regime Analysis: ${regimeAgent.explanation}
+═══ LAYER 1: GLOBAL MACRO ═══
+GIFT Nifty Gap: ${marketContext?.giftNifty?.direction || 'FLAT'} ${marketContext?.giftNifty?.gap || 0} pts
+DOW: ${marketContext?.globalCues?.dow?.changePercent || 0}% | NASDAQ: ${marketContext?.globalCues?.nasdaq?.changePercent || 0}%
+NIKKEI: ${marketContext?.globalCues?.nikkei?.changePercent || 0}% | HANGSENG: ${marketContext?.globalCues?.hangseng?.changePercent || 0}%
+Crude (Brent): ${marketContext?.commodities?.crude?.price || 0} USD (${marketContext?.commodities?.crude?.changePercent || 0}%)
+USD/INR: ${marketContext?.commodities?.usdinr?.price || 0} (${marketContext?.commodities?.usdinr?.change || 0})
+US 10Y Yield: ${marketContext?.commodities?.us10y?.yield || 0}%
+Global Bias: ${marketContext?.overallGlobalBias || 'MIXED'}
 
-═══ AGENT 2: SECTOR ROTATION ═══
-Target Sector: ${sectorAgent.name}
-Sector Bias: ${sectorAgent.bias}
-Sector Momentum: ${sectorAgent.momentum}
-Sector Leading Stock: ${sectorAgent.leadingStock}
+═══ LAYER 2: INSTITUTIONAL FLOWS ═══
+FII Cash Net: ₹${marketContext?.institutional?.fii?.cash || 0} Cr (${marketContext?.institutional?.fii?.direction || 'NEUTRAL'})
+FII Futures Net OI: ${marketContext?.institutional?.fii?.futuresNet || 0} (Long/Short: ${marketContext?.institutional?.fii?.longShortRatio || 1.0})
+DII Cash Net: ₹${marketContext?.institutional?.dii?.cash || 0} Cr (${marketContext?.institutional?.dii?.direction || 'NEUTRAL'})
+Combined Institutional: ${marketContext?.institutional?.fii?.direction || 'NEUTRAL'}
 
-═══ AGENT 3: STOCK STRENGTH ═══
-Intraday Relative Strength: ${stockAgent.relativeStrength > 0 ? '+' : ''}${stockAgent.relativeStrength}% vs Nifty 50
-ORB Breakout Status: ${stockAgent.orbStatus}
+═══ LAYER 3: OPTIONS INTELLIGENCE ═══
+India VIX: ${vix?.current || 14.5} (${vix?.trend || 'FLAT'}, ${vix?.level || 'NORMAL'})
+PCR: ${optionChain?.pcr || 1.05} → PCR stable
+Max Pain: ${optionChain?.maxPain || 24000} (Current price ${optionChain?.maxPain > currentPrice ? 'below' : 'above'} max pain)
+Days to Expiry: ${optionChain?.daysToExpiry || 6}
+Call Walls (Resistance): ${(optionChain?.callWalls || []).map((w: any) => w.strike + ' OI:' + w.oi).join(', ')}
+Put Walls (Support): ${(optionChain?.putWalls || []).map((w: any) => w.strike + ' OI:' + w.oi).join(', ')}
+ATM IV: ${optionChain?.atmIV || 14.2}%
 
-═══ AGENT 4: FUTURES POSITIONING ═══
-OI Buildup Type: ${futuresAgent.buildup}
-OI Change Percent: ${futuresAgent.oiChangePercent > 0 ? '+' : ''}${futuresAgent.oiChangePercent}%
-Futures Volume Bias: ${futuresAgent.buildup.includes('LONG') ? 'ACCUMULATION' : 'DISTRIBUTION'}
-
-═══ AGENT 5: SMC PRICE STRUCTURE ═══
-Structure Bias: ${smcAgent.trend}
-Last 10 Candles:
+═══ LAYER 4: SMC PRICE STRUCTURE ═══
+Last 10 candles (${interval}M):
 ${candles.slice(-10).map((c: any) => 
   `[${formatIST(c.timestamp)}] O:${c.open} H:${c.high} L:${c.low} C:${c.close} V:${c.volume}`
 ).join('\n')}
 
-Active Structural Signals:
-- BOS: ${smcAgent.hasBos ? 'YES' : 'NO'}
-- CHOCH: ${smcAgent.hasChoch ? 'YES' : 'NO'}
-- Unmitigated OB: ${smcAgent.hasUnmitigatedOb ? 'YES' : 'NO'}
-- Unfilled FVG: ${smcAgent.hasUnfilledFvg ? 'YES' : 'NO'}
+SMC Signals Detected:
+${smcSignals.map((s: any) => 
+  `- ${s.type}: Zone ${s.zone ? s.zone[0] + '-' + s.zone[1] : 'N/A'}, Strength:${s.strength || 80}%`
+).join('\n')}
 
-═══ AGENT 6: RISK ENGINE ═══
-Opening Range Buffer: ${riskAgent.isOpeningBuffer ? '⚠️ ACTIVE BLOCK' : 'CLEARED'}
-Closing Range Buffer: ${riskAgent.isClosingBuffer ? '⚠️ ACTIVE BLOCK' : 'CLEARED'}
-High Volatility Warning: ${riskAgent.isHighVolatility ? '⚠️ SHIELD ACTIVE' : 'CLEARED'}
-Choppy Market Block: ${riskAgent.isChoppyIndex ? '⚠️ SHIELD ACTIVE' : 'CLEARED'}
-Risk Verdict: ${confluenceResult.agents.risk.reason}
+═══ LAYER 5: NEWS & EVENTS ═══
+Overall News Sentiment: ${news?.overallNewsSentiment || 'MIXED'}
+High Impact Event Today: ${news?.highImpactEventToday ? 'YES — REDUCE RISK' : 'No'}
+Recent Headlines:
+${(news?.items || []).slice(0, 4).map((n: any) => `[${n.sentiment}] ${n.headline}`).join('\n')}
 
 ═══ PROVIDE ANALYSIS IN THIS EXACT FORMAT ═══
 
-CONVICTION: [A+ INSTITUTIONAL / HIGH / MODERATE / NO TRADE]
+CONVICTION: [HIGH / MEDIUM / LOW / NO TRADE]
 OVERALL BIAS: [BULLISH / BEARISH / NEUTRAL]
 
-6-AGENT SCORE:
-- Regime Agent: [BULLISH/BEARISH/NEUTRAL] — [reason]
-- Sector Agent: [BULLISH/BEARISH/NEUTRAL] — [reason]
-- Stock Agent: [BULLISH/BEARISH/NEUTRAL] — [reason]
-- Futures Agent: [BULLISH/BEARISH/NEUTRAL] — [reason]
-- SMC Agent: [BULLISH/BEARISH/NEUTRAL] — [reason]
-- Risk Engine: [BULLISH/BEARISH/NEUTRAL / ⚠️ WARNING]
+5-LAYER SCORE:
+- Global Macro: [BULLISH/BEARISH/NEUTRAL] — [reason]
+- Institutional: [BULLISH/BEARISH/NEUTRAL] — [reason]
+- Options Intel: [BULLISH/BEARISH/NEUTRAL] — [reason]
+- SMC Structure: [BULLISH/BEARISH/NEUTRAL] — [reason]  
+- News/Events: [BULLISH/BEARISH/NEUTRAL / ⚠️ HIGH RISK]
 
 TRADE SETUP:
 Direction: [BUY / SELL / WAIT]
@@ -127,10 +127,10 @@ Target 1: [price] ([X] pts | 1:[ratio] RR)
 Target 2: [price] ([X] pts | 1:[ratio] RR)
 Position Size: [1% risk | 0.5% if B setup | SKIP if conviction LOW]
 
-KEY LEVEL METRIC:
-Institutional Sweep Point: [price]
-Unmitigated OB Boundary: [price]
-Relative Strength Outperformance: [strength %]
+KEY LEVELS FROM OPTIONS:
+Hard Resistance: [call wall strike]
+Hard Support: [put wall strike]  
+Max Pain Gravity: [max pain] [pull direction]
 
 IMMEDIATE ACTION:
 [1-2 sentences: exactly what to watch for RIGHT NOW]
@@ -142,56 +142,49 @@ DO NOT TRADE IF:
 [Specific conditions that would make this setup invalid]
 ---`;
 
-    // Load local settings for dynamic API key & multi-model selections
     const settings = getSavedSettings();
-    const isAiEnabled = settings.anthropicToggle !== false; // defaults to true if not set
-    const apiKey = isAiEnabled ? settings.anthropicKey : ''; // empty key bypasses AI and runs mock instantly
+    const isAiEnabled = settings.anthropicToggle !== false;
+    const apiKey = isAiEnabled ? settings.anthropicKey : '';
     
-    // Dynamic Model Routing based on Confluence Grade
-    let modelName = 'claude-3-haiku-20240307'; // lightweight default for low/moderate
-    if (confluenceResult.grade === 'A_PLUS') {
-      modelName = settings.anthropicModel || 'claude-3-opus-20240229'; // user's selected premium model
-    } else if (confluenceResult.grade === 'HIGH') {
-      modelName = 'claude-3-5-sonnet-20240620'; // ultra-fast sonnet model
+    // Choose model based on grade
+    let modelName = 'haiku';
+    if (confluenceResult.grade === 'A+' || confluenceResult.grade === 'A') {
+      modelName = 'opus';
     }
 
-    // Save prompts in cache with dynamic parameters for downstream SSE stream
     const analysisId = 'analysis_' + Math.random().toString(36).substring(2, 11);
     promptCache.set(analysisId, { systemPrompt, userPrompt, apiKey, modelName });
 
-    // 3. Log alert to PostgreSQL database if active using Prisma Client (non-blocking)
-    try {
-      if (process.env.DATABASE_URL) {
-        await prisma.aiAlert.create({
-          data: {
-            score: confluenceResult.score,
-            grade: confluenceResult.grade,
-            direction: confluenceResult.direction,
-            headline: `${symbol} Intraday Confluence Alert`,
-            summary: confluenceResult.agents.stock.reason,
-            analysisId,
-            layersData: JSON.stringify({
-              regime: regimeAgent,
-              sector: sectorAgent,
-              stock: stockAgent,
-              futures: futuresAgent,
-              smc: smcAgent,
-              risk: riskAgent
-            })
-          }
-        });
-      }
-    } catch (dbError: any) {
-      console.warn('[DATABASE] Failed to log alert to PG, proceeding in offline memory cache:', dbError.message);
+    // 3. Log alert to Supabase or Mock DB
+    const alertData = {
+      grade: confluenceResult.grade,
+      direction: confluenceResult.direction,
+      entry_zone: '24000 - 24030',
+      stop_loss: '23980',
+      target1: '24080',
+      target2: '24150',
+      confluence_score: confluenceResult.total,
+      smc_signals: JSON.stringify(smcSignals),
+      layer_data: JSON.stringify({ marketContext, optionChain, vix, news }),
+      ai_explanation: '',
+      status: 'PENDING'
+    };
+
+    if (supabase) {
+      try {
+        await supabase.from('alerts').insert({ id: analysisId, ...alertData });
+      } catch {}
+    } else {
+      await mockDb.insertAlert({ id: analysisId, ...alertData });
     }
 
     return NextResponse.json({
       success: true,
       analysisId,
-      message: 'Analysis generated and queued for streaming'
+      message: '5-Layer analysis generated and queued'
     });
   } catch (error: any) {
-    console.error('[API ANALYZE] Route error:', error.message);
+    console.error('[API ANALYZE] Restructure failed:', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

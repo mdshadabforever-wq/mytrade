@@ -1,247 +1,223 @@
-import { detectNoTradeCondition, NoTradeStatus } from './no-trade-engine';
+import { detectNoTradeCondition, NoTradeResult } from './no-trade-engine';
 
-export interface AgentScore {
-  score: number;
-  bias: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+export interface LayerScore {
+  score: number; // 0 to max weight
+  signal: 'BULL' | 'BEAR' | 'NEUTRAL' | 'BLOCKED';
   reason: string;
 }
 
-export interface ConfluenceResult {
-  score: number; // 0-100
-  grade: 'A_PLUS' | 'HIGH' | 'MODERATE' | 'LOW_QUALITY' | 'NO_TRADE';
-  agents: {
-    regime: AgentScore;
-    sector: AgentScore;
-    stock: AgentScore;
-    futures: AgentScore;
-    smc: AgentScore;
-    risk: AgentScore;
-  };
+export interface ConvictionResult {
+  total: number; // 0-100
+  grade: 'A+' | 'A' | 'B' | 'NO_TRADE';
   direction: 'BUY' | 'SELL' | 'WAIT';
+  layers: {
+    macro: LayerScore;
+    institutional: LayerScore;
+    options: LayerScore;
+    structure: LayerScore;
+    risk: LayerScore;
+  };
   shouldAlert: boolean;
-  noTradeStatus?: NoTradeStatus;
+  noTradeReason: string | null;
+  noTradeStatus?: NoTradeResult;
 }
 
 /**
- * Evaluates the master confluence scores across the 6-Agent framework
+ * 100% deterministic 5-layer confluence scorer. No AI is used here.
  */
 export function calculateConfluence(data: {
-  // Agent 1: Regime
-  regime: {
-    type: 'TRENDING_UP' | 'TRENDING_DOWN' | 'RANGING' | 'CHOPPY';
-    bias: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
-    confidence: number;
+  // Layer 1: Macro (GIFT Nifty, Global Indices) - Weight 20
+  macro: {
+    giftNiftyDirection: 'GAP_UP' | 'GAP_DOWN' | 'FLAT';
+    giftNiftyGap: number;
+    alignedIndicesCount: number; // count of global indices trending same direction
+    globalBias: 'BULLISH' | 'BEARISH' | 'MIXED';
   };
-  // Agent 2: Sector
-  sector: {
-    name: string;
-    bias: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
-    momentum: 'ACCELERATING' | 'DECELERATING' | 'STABLE' | 'EXHAUSTED';
+  // Layer 2: Institutional (FII/DII net flows) - Weight 25
+  institutional: {
+    fiiCash: number;
+    diiCash: number;
+    fiiDirection: 'BUYING' | 'SELLING' | 'NEUTRAL';
+    diiDirection: 'BUYING' | 'SELLING' | 'NEUTRAL';
   };
-  // Agent 3: Stock
-  stock: {
-    relativeStrength: number; // vs index
-    orbStatus: 'BULLISH_BREAKOUT' | 'BEARISH_BREAKOUT' | 'INSIDE_RANGE';
+  // Layer 3: Options Intelligence - Weight 25
+  options: {
+    pcr: number;
+    vix: number;
+    isPriceAboveMaxPain: boolean;
+    isObSupporting: boolean;
   };
-  // Agent 4: Futures
-  futures: {
-    buildup: 'LONG_BUILDUP' | 'SHORT_BUILDUP' | 'LONG_UNWINDING' | 'SHORT_COVERING';
-    oiChangePercent: number;
-  };
-  // Agent 5: SMC
-  smc: {
+  // Layer 4: Structure (SMC Signals) - Weight 20
+  structure: {
     hasChoch: boolean;
     hasBos: boolean;
     hasUnmitigatedOb: boolean;
     hasUnfilledFvg: boolean;
-    trend: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+    hasLiquiditySweep: boolean;
   };
-  // Agent 6: Risk
+  // Layer 5: Risk & Volume (Overrides & Expiry Check) - Weight 10
   risk: {
-    isOpeningBuffer: boolean; // First 15 min
-    isClosingBuffer: boolean; // Last 15 min
-    isHighVolatility: boolean; // VIX > 25
-    isChoppyIndex: boolean;
+    timeOfDayMinutes?: number;
+    isHighImpactEventToday?: boolean;
+    isHolidayTomorrow?: boolean;
+    volumePercentOfAverage?: number;
+    sectorDispersion: { strongestChange: number; weakestChange: number };
   };
-  // Expanded optional institutional parameters for exact No-Trade detection
-  institutional?: {
-    fiiNetCash: number;
-    diiNetCash: number;
-  };
-  vixValue?: number;
-  sectorDispersion?: {
-    strongestChange: number;
-    weakestChange: number;
-  };
-  timeOfDayMinutes?: number;
-}): ConfluenceResult {
-  let score = 0;
-
-  // 1. Resolve exact parameters for No-Trade detection
-  const resolvedVix = data.vixValue ?? (data.risk.isHighVolatility ? 26 : 14.5);
-  const resolvedFii = data.institutional?.fiiNetCash ?? 850;
-  const resolvedDii = data.institutional?.diiNetCash ?? -200;
-  const resolvedDispersion = data.sectorDispersion ?? { strongestChange: 1.2, weakestChange: -0.4 };
-
+}): ConvictionResult {
+  
+  // 1. Evaluate Layer 5: Risk & Overrides (Deterministic No-Trade)
   const noTradeStatus = detectNoTradeCondition({
-    vix: resolvedVix,
-    regimeType: data.regime.type,
-    sectorDispersion: resolvedDispersion,
-    fiiNetCash: resolvedFii,
-    diiNetCash: resolvedDii,
-    timeOfDayMinutes: data.timeOfDayMinutes
+    vix: data.options.vix,
+    regimeType: data.macro.globalBias === 'MIXED' ? 'CHOPPY' : 'TRENDING_UP',
+    sectorDispersion: data.risk.sectorDispersion,
+    fiiNetCash: data.institutional.fiiCash,
+    diiNetCash: data.institutional.diiCash,
+    timeOfDayMinutes: data.risk.timeOfDayMinutes,
+    isHighImpactEventToday: data.risk.isHighImpactEventToday,
+    isHolidayTomorrow: data.risk.isHolidayTomorrow,
+    volumePercentOfAverage: data.risk.volumePercentOfAverage
   });
 
-  // ==========================================
-  // Agent 1: Market Regime (Max 15)
-  // ==========================================
-  let regimeScore = 5;
-  let regimeReason = 'Index consolidates inside range limits.';
-  if (data.regime.bias === 'BULLISH') {
-    regimeScore = data.regime.type === 'TRENDING_UP' ? 15 : 10;
-    regimeReason = 'Bullish trending regime confirmed on intraday charts.';
-  } else if (data.regime.bias === 'BEARISH') {
-    regimeScore = data.regime.type === 'TRENDING_DOWN' ? 15 : 10;
-    regimeReason = 'Bearish breakdown structure dominates index regime.';
-  }
-  score += regimeScore;
+  const isBlocked = noTradeStatus.isNoTradeDay;
 
-  // ==========================================
-  // Agent 2: Sector Rotation (Max 20)
-  // ==========================================
-  let sectorScore = 5;
-  let sectorReason = 'Target sector is neutral or consolidating.';
-  if (data.sector.bias === 'BULLISH') {
-    sectorScore = data.sector.momentum === 'ACCELERATING' ? 20 : 15;
-    sectorReason = `Sector ${data.sector.name} leads index rotation with accelerating momentum.`;
-  } else if (data.sector.bias === 'BEARISH') {
-    sectorScore = data.sector.momentum === 'ACCELERATING' ? 20 : 15;
-    sectorReason = `Sector ${data.sector.name} under distribution pressure.`;
-  }
-  score += sectorScore;
-
-  // ==========================================
-  // Agent 3: Stock relative strength (Max 20)
-  // ==========================================
-  let stockScore = 5;
-  let stockReason = 'Stock trades inside daily ranges.';
-  const hasOrbBreakout = data.stock.orbStatus !== 'INSIDE_RANGE';
-  
-  if (data.stock.relativeStrength > 1.0) {
-    stockScore = hasOrbBreakout ? 20 : 12;
-    stockReason = `Stock outperforming Nifty (RS: ${data.stock.relativeStrength}%) with ORB breakout.`;
-  } else if (data.stock.relativeStrength < -1.0) {
-    stockScore = hasOrbBreakout ? 20 : 12;
-    stockReason = `Stock underperforming index (RS: ${data.stock.relativeStrength}%) with breakdown.`;
-  }
-  score += stockScore;
-
-  // ==========================================
-  // Agent 4: Futures buildup (Max 20)
-  // ==========================================
-  let futuresScore = 5;
-  let futuresReason = 'Neutral derivatives buildup.';
-  
-  if (data.futures.buildup === 'LONG_BUILDUP' && Math.abs(data.futures.oiChangePercent) > 2) {
-    futuresScore = 20;
-    futuresReason = 'Strong Long Buildup denotes aggressive institutional inflows.';
-  } else if (data.futures.buildup === 'SHORT_BUILDUP' && Math.abs(data.futures.oiChangePercent) > 2) {
-    futuresScore = 20;
-    futuresReason = 'Strong Short Buildup denotes aggressive distribution hedging.';
-  } else if (data.futures.buildup === 'SHORT_COVERING') {
-    futuresScore = 12;
-    futuresReason = 'Short covering triggers minor short-squeeze rally.';
-  }
-  score += futuresScore;
-
-  // ==========================================
-  // Agent 5: SMC structure (Max 15)
-  // ==========================================
-  let smcScore = 5;
-  let smcReason = 'Index structure consolidates inside equilibrium.';
-  if (data.smc.hasChoch && data.smc.hasUnmitigatedOb) {
-    smcScore = 15;
-    smcReason = 'CHOCH trend reversal coupled with fresh Order Block levels.';
-  } else if (data.smc.hasBos) {
-    smcScore = 10;
-    smcReason = 'BOS structure break confirms trend expansion.';
-  }
-  score += smcScore;
-
-  // ==========================================
-  // Agent 6: Risk Engine (Max 10)
-  // ==========================================
+  // Layer 5 (Risk, weight 10 or block)
   let riskScore = 10;
-  const riskWarnings: string[] = [];
-  
-  if (data.risk.isOpeningBuffer || data.risk.isClosingBuffer) {
+  let riskSignal: LayerScore['signal'] = 'NEUTRAL';
+  let riskReason = 'Risk parameters stable.';
+
+  if (isBlocked) {
     riskScore = 0;
-    riskWarnings.push('⚠️ Buffer Window: Avoid trading in opening or closing 15 minutes.');
+    riskSignal = 'BLOCKED';
+    riskReason = noTradeStatus.reasons[0] || 'Strict capital safety block active.';
+  } else if (data.options.vix > 20) {
+    riskScore = 5;
+    riskSignal = 'BEAR';
+    riskReason = 'VIX elevated (20-25). Expect high intraday noise.';
+  } else {
+    riskSignal = 'BULL';
   }
-  if (data.risk.isHighVolatility || resolvedVix > 18) {
-    riskScore -= 5;
-    riskWarnings.push('⚠️ VIX Spikes: High volatility regime; reduce position sizes by 50%.');
-  }
-  if (data.risk.isChoppyIndex) {
-    riskScore -= 3;
-    riskWarnings.push('⚠️ Choppy Index: Consolidations cap trend expectancy.');
+
+  // Layer 1 (Macro, weight 20)
+  let macroScore = 5;
+  let macroSignal: LayerScore['signal'] = 'NEUTRAL';
+  let macroReason = 'Mixed global macro triggers.';
+  
+  if (data.macro.alignedIndicesCount >= 3) {
+    macroScore = 20;
+    macroSignal = data.macro.globalBias === 'BULLISH' ? 'BULL' : 'BEAR';
+    macroReason = `Strong global correlation: ${data.macro.alignedIndicesCount} indices aligned ${data.macro.globalBias}.`;
+  } else if (data.macro.alignedIndicesCount === 2) {
+    macroScore = 12;
+    macroSignal = 'NEUTRAL';
+    macroReason = 'Moderate global indices alignment.';
   }
   
-  score += Math.max(0, riskScore);
+  // Layer 2 (Institutional, weight 25)
+  let instScore = 5;
+  let instSignal: LayerScore['signal'] = 'NEUTRAL';
+  let instReason = 'Mixed or flat institutional activity.';
 
-  // Apply absolute risk locks
-  const isTradeBlocked = data.risk.isOpeningBuffer || data.risk.isClosingBuffer;
-  if (isTradeBlocked) {
-    score = 0;
+  if (data.institutional.fiiDirection === 'BUYING' && data.institutional.diiDirection === 'BUYING') {
+    instScore = 25;
+    instSignal = 'BULL';
+    instReason = 'FII + DII joint buying denotes active cash accumulation.';
+  } else if (data.institutional.fiiDirection === 'SELLING' && data.institutional.diiDirection === 'SELLING') {
+    instScore = 0;
+    instSignal = 'BEAR';
+    instReason = 'Joint FII + DII distribution. Heavy selling pressure.';
+  } else if (data.institutional.fiiDirection === 'BUYING' || data.institutional.diiDirection === 'BUYING') {
+    instScore = 15;
+    instSignal = 'NEUTRAL';
+    instReason = 'One-sided institutional support.';
   }
 
-  // Force score lock if strict no-trade detection triggers
-  if (noTradeStatus.isNoTradeActive) {
-    score = Math.min(score, 30); // Force low confluence
+  // Layer 3 (Options, weight 25)
+  let optScore = 5;
+  let optSignal: LayerScore['signal'] = 'NEUTRAL';
+  let optReason = 'Option metrics in neutral consolidation.';
+
+  if (data.options.pcr > 1.0 && data.options.isPriceAboveMaxPain && data.options.isObSupporting) {
+    optScore = 25;
+    optSignal = 'BULL';
+    optReason = 'High PCR (>1.0) and price above support floor walls.';
+  } else if (data.options.pcr < 0.8 && data.options.vix > 18) {
+    optScore = 5;
+    optSignal = 'BEAR';
+    optReason = 'Bearish PCR (<0.8) and rising VIX ceiling pressure.';
+  } else if (data.options.pcr >= 0.8 && data.options.pcr <= 1.0) {
+    optScore = 12;
+    optSignal = 'NEUTRAL';
+    optReason = 'PCR neutral, max pain magnetic gravity active.';
   }
 
-  // Determine conviction grade
-  let grade: ConfluenceResult['grade'] = 'NO_TRADE';
-  let direction: ConfluenceResult['direction'] = 'WAIT';
+  // Layer 4 (SMC Structure, weight 20)
+  let structScore = 5;
+  let structSignal: LayerScore['signal'] = 'NEUTRAL';
+  let structReason = 'Chop structure. No validated order blocks.';
 
-  if (score >= 86) {
-    grade = 'A_PLUS';
-  } else if (score >= 71) {
-    grade = 'HIGH';
-  } else if (score >= 51) {
-    grade = 'MODERATE';
-  } else if (score >= 31) {
-    grade = 'LOW_QUALITY';
-  } else {
+  if (data.structure.hasChoch && data.structure.hasUnmitigatedOb && data.structure.hasUnfilledFvg && data.structure.hasLiquiditySweep) {
+    structScore = 20;
+    structSignal = 'BULL';
+    structReason = 'High conviction CHOCH, fresh OB, unfilled FVG, and liquidity sweeps.';
+  } else if (data.structure.hasBos && data.structure.hasUnmitigatedOb) {
+    structScore = 15;
+    structSignal = 'BULL';
+    structReason = 'BOS continuation break coupled with fresh unmitigated Order Blocks.';
+  } else if (data.structure.hasUnmitigatedOb || data.structure.hasUnfilledFvg) {
+    structScore = 8;
+    structReason = 'Single OB or FVG detected. Standard momentum validation.';
+  }
+
+  // Final Total Confluence Math
+  let total = isBlocked ? 0 : (macroScore + instScore + optScore + structScore + riskScore);
+
+  // Grade Thresholds
+  let grade: ConvictionResult['grade'] = 'NO_TRADE';
+  if (isBlocked || total < 45) {
     grade = 'NO_TRADE';
+  } else if (total >= 75) {
+    grade = 'A+';
+  } else if (total >= 60) {
+    grade = 'A';
+  } else {
+    grade = 'B';
   }
 
-  // Resolve direction based on biases
-  const bullishCount = [data.regime.bias, data.sector.bias, data.smc.trend].filter(x => x === 'BULLISH').length;
-  const bearishCount = [data.regime.bias, data.sector.bias, data.smc.trend].filter(x => x === 'BEARISH').length;
-
-  if (bullishCount >= 2 && !isTradeBlocked && score >= 50 && !noTradeStatus.isNoTradeActive) {
-    direction = 'BUY';
-  } else if (bearishCount >= 2 && !isTradeBlocked && score >= 50 && !noTradeStatus.isNoTradeActive) {
-    direction = 'SELL';
+  // Direction resolution
+  let direction: ConvictionResult['direction'] = 'WAIT';
+  if (grade !== 'NO_TRADE') {
+    const bullLayerCount = [macroSignal, instSignal, optSignal, structSignal].filter(s => s === 'BULL').length;
+    const bearLayerCount = [macroSignal, instSignal, optSignal, structSignal].filter(s => s === 'BEAR').length;
+    if (bullLayerCount >= 2) direction = 'BUY';
+    else if (bearLayerCount >= 2) direction = 'SELL';
   }
 
-  // Only Grade A+ and A should notify prominently (score >= 71)
-  const shouldAlert = score >= 71 && !isTradeBlocked && !noTradeStatus.isNoTradeActive;
+  const shouldAlert = (grade === 'A+' || grade === 'A') && !isBlocked;
+
+  console.log('[CONFLUENCE DIAGNOSTICS] Layer Scores & Inputs:', {
+    macro: { score: macroScore, signal: macroSignal, input: data.macro },
+    institutional: { score: instScore, signal: instSignal, input: data.institutional },
+    options: { score: optScore, signal: optSignal, input: data.options },
+    structure: { score: structScore, signal: structSignal, input: data.structure },
+    risk: { score: riskScore, signal: riskSignal, input: data.risk },
+    total,
+    grade,
+    isBlocked
+  });
 
   return {
-    score,
+    total,
     grade,
-    agents: {
-      regime: { score: regimeScore, bias: data.regime.bias, reason: regimeReason },
-      sector: { score: sectorScore, bias: data.sector.bias, reason: sectorReason },
-      stock: { score: stockScore, bias: data.stock.relativeStrength >= 0 ? 'BULLISH' : 'BEARISH', reason: stockReason },
-      futures: { score: futuresScore, bias: data.futures.buildup.includes('LONG') || data.futures.buildup === 'SHORT_COVERING' ? 'BULLISH' : 'BEARISH', reason: futuresReason },
-      smc: { score: smcScore, bias: data.smc.trend, reason: smcReason },
-      risk: { score: riskScore, bias: riskScore >= 7 ? 'BULLISH' : 'BEARISH', reason: riskWarnings.join(' | ') || 'Risk levels stable. Action approved.' }
-    },
     direction,
+    layers: {
+      macro: { score: macroScore, signal: macroSignal, reason: macroReason },
+      institutional: { score: instScore, signal: instSignal, reason: instReason },
+      options: { score: optScore, signal: optSignal, reason: optReason },
+      structure: { score: structScore, signal: structSignal, reason: structReason },
+      risk: { score: riskScore, signal: riskSignal, reason: riskReason }
+    },
     shouldAlert,
+    noTradeReason: isBlocked ? riskReason : null,
     noTradeStatus
   };
 }

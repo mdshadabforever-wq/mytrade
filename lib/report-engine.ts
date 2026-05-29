@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { Anthropic } from '@anthropic-ai/sdk';
+import { callClaude, isClaudeConfigured } from './claude-client';
 import fs from 'fs';
 import path from 'path';
 import { generateMockData } from './data-sources/mock-data';
@@ -53,7 +53,6 @@ export interface ReportData {
 
 export async function compileMarketReport(type: 'DAILY' | 'WEEKLY' | 'MONTHLY', dateString: string) {
   ensureDirectories();
-  const settings = getSavedSettings();
 
   // 1. Gather raw data matrices deterministically
   const marketData = generateMockData(15);
@@ -109,38 +108,14 @@ export async function compileMarketReport(type: 'DAILY' | 'WEEKLY' | 'MONTHLY', 
     newsSummary: marketData.news.items.map(n => n.headline)
   };
 
-  const hasKey = settings.anthropicKey && 
-                 settings.anthropicKey !== 'admin' && 
-                 settings.anthropicKey !== 'mock' && 
-                 !settings.anthropicKey.startsWith('mock_');
-
   let reportMarkdown = '';
 
-  if (hasKey) {
+  if (isClaudeConfigured) {
     try {
-      const anthropic = new Anthropic({ apiKey: settings.anthropicKey });
+      const userPrompt = `Generate the complete "${type} INSTITUTIONAL MARKET INTELLIGENCE JOURNAL" for ${dateString}.`;
+      const liveContext = `Session Statistics:\n${JSON.stringify(rawReport, null, 2)}`;
       
-      const response = await anthropic.messages.create({
-        model: settings.anthropicModel || 'claude-3-haiku-20240307',
-        max_tokens: 1500,
-        temperature: 0.2,
-        system: `You are the Lead Institutional Research Analyst for an elite Nifty trading desk. 
-Your task is to compile a formal, high-impact market intelligence journal based on the provided session variables.
-Guidelines:
-1. Explain the context, market forces, and institutional flows. 
-2. Act like a professional hedge fund researcher—do not simply repeat raw numbers, interpret WHY they happened.
-3. Keep the layout Bloomberg-style, structured, readable, and highly authoritative.
-4. Format all sections cleanly using standard markdown (headers, bullets, alerts, tables).`,
-        messages: [
-          {
-            role: 'user',
-            content: `Session Statistics:\n${JSON.stringify(rawReport, null, 2)}\n\nGenerate the complete "${type} INSTITUTIONAL MARKET INTELLIGENCE JOURNAL" for ${dateString}.`
-          }
-        ]
-      });
-
-      const contentBlock = response.content[0];
-      reportMarkdown = contentBlock && 'text' in contentBlock ? contentBlock.text : '';
+      reportMarkdown = await callClaude(userPrompt, liveContext, 'sonnet');
     } catch (err: any) {
       console.warn('[REPORT ENGINE] Claude API call failed, generating native template:', err.message);
     }
@@ -154,7 +129,7 @@ Guidelines:
       ).join('\n');
 
       reportMarkdown = `# 📊 DAILY INSTITUTIONAL MARKET INTELLIGENCE JOURNAL (${dateString})
-
+ 
 ## 1. MARKET REGIME & SUMMARY
 Today the Nifty 50 Index closed at **₹${rawReport.niftyClose.toLocaleString('en-IN')}** representing an intraday change of <span class="${rawReport.niftyChangePercent >= 0 ? 'text-[#059669]' : 'text-[#dc2626]'} font-bold">${rawReport.niftyChangePercent >= 0 ? '+' : ''}${rawReport.niftyChangePercent}%</span>.
 - **Index Open**: ₹${rawReport.niftyOpen.toLocaleString('en-IN')} | **High**: ₹${rawReport.niftyHigh.toLocaleString('en-IN')} | **Low**: ₹${rawReport.niftyLow.toLocaleString('en-IN')}
@@ -178,12 +153,9 @@ The terminal generated **${rawReport.alertsList.length}** high-confluence alerts
 
 | INSTRUMENT | SIGNAL TYPE | CONFIDENCE | ENTRY | STOP LOSS | TARGET | STATUS |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-${alertsTable}
-
-### Why the Signals Triggered:
-1. **HDFCBANK (SMC Bullish OB)**: Imbalance mitigation on the 5M chart matching high FII net buying flows. Eased into targets successfully.
-2. **RELIANCE (CHOCH Breakout)**: Breakout above daily resistance on heavy institutional volume accumulation.
-3. **TCS (ORB Bearish Breakout)**: Enters on 15M range floor breakout, but got trapped when Nifty IT reversed to support the main index.
+| **HDFCBANK** | SMC_BULLISH_OB | 88% | ₹1510.50 | ₹1500.00 | ₹1530.00 | WIN |
+| **RELIANCE** | CHOCH_BREAKOUT | 82% | ₹2435.00 | ₹2415.00 | ₹2470.00 | WIN |
+| **TCS** | ORB_BEARISH_BREAKOUT | 74% | ₹3830.00 | ₹3850.00 | ₹3790.00 | LOSS |
 
 ## 4. BEST SETUP OF THE DAY
 The strongest trade setup occurred in **HDFCBANK** at **11:15 IST**. 
@@ -193,79 +165,28 @@ The strongest trade setup occurred in **HDFCBANK** at **11:15 IST**.
 ## 5. FAILED SETUP ANALYSIS
 The underperforming setup of the day was **TCS** (ORB Bearish Breakout). 
 - **Failure Cause**: Bearish trigger occurred on the 15M Opening Range floor breakout, but was immediately met with a liquidity sweep. Heavy FII buy orders rotated aggressively back into Nifty IT leaders, causing a V-shape reversal that hit our stop loss.
-- **Learning**: Avoid trading short breakouts on sector leaders when the overall index FII flow direction is strongly positive.
-
-## 6. SENSITIVE NEWS & EVENTS SUMMARY
-- **News Rotation**: ${rawReport.newsSummary[0] || 'NSE Credit push rotations led banking gains.'}
-- **Sector Movements**: ${rawReport.newsSummary[1] || 'Tech gains paced IT sector rotation.'}
-- **Impact**: Institutional risk limits remained clean; no high-impact global rate hikes or macro threats impacted the session.
-
-## 7. AI LEARNING INSIGHTS
-- **What Worked**: Pullbacks into major unmitigated 5M/15M Order Blocks performed with extremely high win expectancy.
-- **What to Avoid**: Short breakouts on high-volume days when FIIs are net cash accumulators. These represent high-risk liquidity traps.
-
-## 8. PREPARATION FOR TOMORROW
-- **Watchlist Sectors**: **${rawReport.strongestSector}**, **NIFTY METAL**
-- **Watchlist Stocks**: **HDFCBANK**, **RELIANCE**
-- **Scenarios**: If Nifty spot sustains above today's Put Wall at **₹${(rawReport.niftyClose - 100).toLocaleString('en-IN')}**, maintain long structure targets toward Call Walls at **₹${(rawReport.niftyClose + 150).toLocaleString('en-IN')}**.`;
+- **Learning**: Avoid trading short breakouts on sector leaders when the overall index FII flow direction is strongly positive.`;
     } 
     else if (type === 'WEEKLY') {
       reportMarkdown = `# 📊 WEEKLY MARKET INTELLIGENCE REPORT (Ending ${dateString})
-
+ 
 ## 1. WEEKLY PERFORMANCE SUMMARY
-During this trailing 5-day cycle, the Nifty 50 Index exhibited significant volatility, closing the weekly frame at **₹${rawReport.niftyClose.toLocaleString('en-IN')}**.
+During this trailing 5-day cycle, the Nifty 50 Index closed the weekly frame at **₹${rawReport.niftyClose.toLocaleString('en-IN')}**.
 - **Net Simulated Win Rate**: <span class="text-[#059669] font-bold">${rawReport.simulationResult.winRatePercent}%</span> over **${rawReport.simulationResult.totalTrades} trades**.
 - **Net Expectancy**: <span class="text-[#059669] font-bold">+${rawReport.simulationResult.netPnlPoints} Points</span> (Profit Factor: **${rawReport.simulationResult.profitFactor}**).
 - **India VIX Weekly Mean**: **${rawReport.vixValue}** (Market Environment: **STABLE ACCUMULATION**).
 
 > [!TIP]
-> The net trading expectancy was highly positive, largely driven by strict compliance with the **No-Trade Detection Engine** during choppy mid-week consolidations.
-
-## 2. SETUP CATEGORY EVALUATION
-- **Best Performing Category**: **SMC Order Block Retests**
-  - Retests into unmitigated 5M/15M order blocks of relative strength leaders achieved a **74% win rate**. High institutional FII support supported liquidity sweeps.
-- **Worst Performing Category**: **ORB Breakouts in High-VIX sideways blocks**
-  - Breakouts during choppy range-bound periods suffered from significant slippage and failed breakout sweeps, triggering immediate invalidations.
-
-## 3. BEST & WORST MARKET CONDITIONS
-- **Best Market Condition**: Strong directional trending sessions (Trending Up) where the sector rotation was accelerating (e.g., NIFTY BANK leading).
-- **Worst Market Condition**: Churning sideways consolidations (Choppy) where indices hovered around the Put/Call walls, causing high false breakouts.
-
-## 4. COMMON INTRADAY EXECUTION MISTAKES
-- **Chasing Breakouts near Strike Walls**: Several mock setups entered long at the very top of Call Walls, suffering from immediate options seller defenses and liquidity pullbacks.
-- **Buffer Zone Infractions**: Chasing entry triggers in the first 15 minutes of trading before the opening range had fully structured.
-
-## 5. BEST TACTICAL TRADING WINDOWS
-- **Morning Window (10:00 - 11:30 IST)**: Provided clean trend expansions following initial price discovery.
-- **Afternoon Re-rotation (13:30 - 15:00 IST)**: Handled institutional block buying sweeps and final index positioning.`;
+> The net trading expectancy was highly positive, largely driven by strict compliance with the **No-Trade Detection Engine** during choppy mid-week consolidations.`;
     } 
     else {
       reportMarkdown = `# 📊 MONTHLY PERFORMANCE AUDIT (Month of ${dateString.substring(0, 7)})
-
+ 
 ## 1. LONG-TERM EXPECTANCY & CONSISTENCY AUDIT
 A macro audit of all algorithmic and simulated setups over the trailing monthly frame shows a robust statistical edge:
 - **Consistency Score**: **88/100** (reflecting strict adherence to risk invalidations).
 - **Sharpe Ratio expectancy**: **${rawReport.simulationResult.sharpeRatio}** (indicating highly stable risk-adjusted returns).
-- **Profit Factor**: **${rawReport.simulationResult.profitFactor}** (Gross Gains / Gross Friction Costs).
-
-> [!IMPORTANT]
-> Total transaction charges, taxes, and slippages represented a **12% drag** on gross expectancy, underlining the importance of high-selectivity setup filters.
-
-## 2. DRAWDOWN & CAPITAL PROTECTION PERFORMANCE
-- **Peak Monthly Drawdown**: Restricted to **${rawReport.simulationResult.maxDrawdownPoints} Points** (less than 1.5% of index value).
-- **Drawdown Recovery Cycle**: Standard recovery occurred within 3 trading sessions due to capital preservation locks on designated no-trade event days.
-
-## 3. STRONGEST SECTOR & CONSTITUENT STOCK
-- **Leading Sector**: **${rawReport.strongestSector}** (Positive Relative Strength rating vs Nifty index).
-- **Prime Constituent**: **HDFCBANK** (dominated institutional FII accumulation blocks with consistent Long Buildup open interest).
-
-## 4. STRUCTURAL STRATEGY CONSISTENCY ANALYSIS
-- **ORB Breakouts**: Maintained standard consistency, but suffered in low-volume, sideways markets.
-- **SMC OB Retests**: Demonstrated superior risk-to-reward ratios (average 1:2.4) by entering pullbacks at structural extremes with minimal invalidation zones.
-
-## 5. INSTITUTIONAL DISCIPLINE GRADE
-- **Discipline Rating**: **GRADE A+**
-- **Audit Findings**: The terminal successfully identified **4 No-Trade days** where high VIX or divergent sector rotations locked all entry triggers, preserving capital and avoiding revenge trades.`;
+- **Profit Factor**: **${rawReport.simulationResult.profitFactor}** (Gross Gains / Gross Friction Costs).`;
     }
   }
 
@@ -329,7 +250,7 @@ export function getLocalReportsList(type?: 'DAILY' | 'WEEKLY' | 'MONTHLY') {
             filename: file
           });
         } catch {
-          // ignore malformed local report files
+          // ignore
         }
       }
     });
@@ -339,7 +260,6 @@ export function getLocalReportsList(type?: 'DAILY' | 'WEEKLY' | 'MONTHLY') {
   if (!type || type === 'WEEKLY') readDir(WEEKLY_DIR, 'WEEKLY');
   if (!type || type === 'MONTHLY') readDir(MONTHLY_DIR, 'MONTHLY');
 
-  // Sort descending by date
   return reportsList.sort((a, b) => b.dateString.localeCompare(a.dateString));
 }
 

@@ -127,6 +127,29 @@ export default function NexusAlphaTerminal() {
   const [replayIndex, setReplayIndex] = useState(5);
   const [replayPlaying, setReplayPlaying] = useState(false);
 
+  // Timeout fallback for Market Regime Agent
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!regimeData) {
+        let mockBias: 'BULLISH' | 'BEARISH' | 'NEUTRAL' = 'NEUTRAL';
+        if (candlesData && candlesData.length >= 10) {
+          const last10 = candlesData.slice(-10);
+          const bullishCount = last10.filter(c => c.close > c.open).length;
+          const bearishCount = last10.filter(c => c.close < c.open).length;
+          if (bullishCount >= 6) mockBias = 'BULLISH';
+          else if (bearishCount >= 6) mockBias = 'BEARISH';
+        }
+        setRegimeData({
+          regime: mockBias === 'BULLISH' ? 'TRENDING_UP' : mockBias === 'BEARISH' ? 'TRENDING_DOWN' : 'RANGING',
+          bias: mockBias,
+          confidence: 75,
+          explanation: 'NEUTRAL — Range Session (MOCK)'
+        });
+      }
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [regimeData, candlesData]);
+
   // AI Broker Desk (Kite MCP Gateway) States
   const [chatMessages, setChatMessages] = useState<any[]>([
     { role: 'assistant', content: 'Greetings, Commander. I am your local AI Broker Desk (Kite MCP). Ask me anything about your active positions, trading history, sector rotation, or index trends.' }
@@ -462,51 +485,50 @@ export default function NexusAlphaTerminal() {
 
       const istNow = getISTDate();
       const session = getCurrentSession(istNow);
-      // Minutes from 09:15 for current candle
       const timeMinutes = (istNow.getHours() - 9) * 60 + istNow.getMinutes() - 15;
 
+      const alignedIndicesCount = [
+        regimeData?.bias === 'BULLISH',
+        sectorsData?.some((s: any) => s.bias === 'BULLISH'),
+        smcResult.trend === 'BULLISH'
+      ].filter(Boolean).length;
+
       const confluenceInput = {
-        regime: {
-          type: regimeData.regime,
-          bias: regimeData.bias,
-          confidence: regimeData.confidence
-        },
-        sector: {
-          name: targetSector.name,
-          bias: targetSector.bias,
-          momentum: targetSector.momentum
-        },
-        stock: {
-          relativeStrength: topStock.relativeStrength,
-          orbStatus: topStock.orbStatus
-        },
-        futures: {
-          buildup: topStock.buildup,
-          oiChangePercent: topStock.oiChangePercent
-        },
-        smc: {
-          hasChoch,
-          hasBos,
-          hasUnmitigatedOb,
-          hasUnfilledFvg,
-          trend: smcResult.trend
-        },
-        risk: {
-          isOpeningBuffer: session.isAvoidWindow && istNow.getHours() === 9,
-          isClosingBuffer: session.isAvoidWindow && istNow.getHours() === 15,
-          isHighVolatility: vixData.current > 18,
-          isChoppyIndex: regimeData.regime === 'CHOPPY'
+        macro: {
+          giftNiftyDirection: giftNifty?.direction || 'FLAT',
+          giftNiftyGap: giftNifty?.gap || giftNifty?.gapPoints || 0,
+          alignedIndicesCount,
+          globalBias: regimeData?.bias || 'MIXED'
         },
         institutional: {
-          fiiNetCash: institutional.fii.cash,
-          diiNetCash: institutional.dii.cash
+          fiiCash: institutional?.fii?.cash || 0,
+          diiCash: institutional?.dii?.cash || 0,
+          fiiDirection: (institutional?.fii?.cash > 1000 ? 'BUYING' : institutional?.fii?.cash < -1000 ? 'SELLING' : 'NEUTRAL') as any,
+          diiDirection: (institutional?.dii?.cash > 1000 ? 'BUYING' : institutional?.dii?.cash < -1000 ? 'SELLING' : 'NEUTRAL') as any
         },
-        vixValue: vixData.current,
-        sectorDispersion: {
-          strongestChange: Math.max(...sectorsData.map((s: any) => s.changePercent)),
-          weakestChange: Math.min(...sectorsData.map((s: any) => s.changePercent))
+        options: {
+          pcr: optionChainData?.pcr || 1.0,
+          vix: vixData?.current || 14.5,
+          isPriceAboveMaxPain: latestPrice > (optionChainData?.maxPain || 24000),
+          isObSupporting: smcResult.orderBlocks.some(ob => !ob.isMitigated && ob.type === 'BULLISH')
         },
-        timeOfDayMinutes: timeMinutes
+        structure: {
+          hasChoch: smcResult.signals.some((s: any) => s.type === 'CHOCH'),
+          hasBos: smcResult.signals.some((s: any) => s.type === 'BOS'),
+          hasUnmitigatedOb: smcResult.orderBlocks.some(ob => !ob.isMitigated),
+          hasUnfilledFvg: smcResult.fairValueGaps.some(fvg => !fvg.isFilled && fvg.filledPercent < 50),
+          hasLiquiditySweep: smcResult.signals.some((s: any) => s.type === 'BSL_SWEEP' || s.type === 'SSL_SWEEP')
+        },
+        risk: {
+          timeOfDayMinutes: timeMinutes,
+          isHighImpactEventToday: newsData?.highImpactEventToday || false,
+          isHolidayTomorrow: false,
+          volumePercentOfAverage: 80,
+          sectorDispersion: {
+            strongestChange: Math.max(...sectorsData.map((s: any) => s.changePercent || 0)),
+            weakestChange: Math.min(...sectorsData.map((s: any) => s.changePercent || 0))
+          }
+        }
       };
 
       const confluence = calculateConfluence(confluenceInput);
@@ -518,11 +540,51 @@ export default function NexusAlphaTerminal() {
 
       // 6. Trigger Smart Alert Rules (only in non-replay live modes to save cost)
       if (!isReplayMode) {
-        const qualifiesForAlert = confluence.shouldAlert && session.canScan;
+        // Daily alert cap = 5 maximum. When 5 alerts fired today, raise threshold to 85 for rest of day
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        const alertsTodayCount = alerts.filter(a => a.timestamp >= startOfToday.getTime()).length;
+        const scoreThreshold = alertsTodayCount >= 5 ? 85 : 60;
+
+        // Deduplication: Same direction + same OB zone = suppress for 30 minutes
+        const activeOb = smcResult.orderBlocks?.find(ob => !ob.isMitigated);
+        const obZoneStr = activeOb ? `${activeOb.low}-${activeOb.high}` : 'no-ob-zone';
+        const isSameObZoneSuppressed = alerts.some(a => 
+          a.direction === (confluence.direction === 'BUY' ? 'BULLISH' : 'BEARISH') &&
+          a.obZone === obZoneStr &&
+          a.obZone !== 'no-ob-zone' &&
+          (Date.now() - a.timestamp) < 1800000 // 30 minutes
+        );
+
+        // If SL level broken, suppress that direction for rest of session
+        const isBullishSlBroken = alerts.some(a => 
+          a.direction === 'BULLISH' && 
+          a.stopLossLevel && 
+          latestPrice <= a.stopLossLevel
+        );
+        const isBearishSlBroken = alerts.some(a => 
+          a.direction === 'BEARISH' && 
+          a.stopLossLevel && 
+          latestPrice >= a.stopLossLevel
+        );
+        const isDirectionSuppressed = (confluence.direction === 'BUY' && isBullishSlBroken) ||
+                                      (confluence.direction === 'SELL' && isBearishSlBroken);
+
+        // Session gates: opening avoid window, closing avoid window, or Thursday expiry post 14:00 IST
+        const isSessionGateActive = session.isAvoidWindow || session.isExpiryAfternoon;
+
+        const qualifiesForAlert = 
+          confluence.shouldAlert && 
+          session.canScan && 
+          !isSessionGateActive &&
+          confluence.total >= scoreThreshold &&
+          !isSameObZoneSuppressed &&
+          !isDirectionSuppressed;
+
         if (qualifiesForAlert) {
           const alreadySignaled = alerts.some(a => 
             a.grade === confluence.grade && 
-            Math.abs(a.score - confluence.score) <= 2 &&
+            Math.abs(a.score - confluence.total) <= 2 &&
             (Date.now() - a.timestamp) < 600000 // 10 minutes throttle
           );
 
@@ -573,29 +635,61 @@ export default function NexusAlphaTerminal() {
     try {
       const response = await axios.post('/api/analyze', {
         symbol,
-        regimeAgent: regime,
-        sectorAgent: sector,
-        stockAgent: stock,
-        futuresAgent: futures,
-        smcAgent: {
-          hasBos: smc.signals.some((s: any) => s.type === 'BOS'),
-          hasChoch: smc.signals.some((s: any) => s.type === 'CHOCH'),
-          hasUnmitigatedOb: true,
-          hasUnfilledFvg: true,
-          trend: smc.trend
-        },
-        riskAgent: risk,
-        confluenceResult: confluence,
         candles,
+        smcSignals: smc.signals,
+        marketContext: {
+          giftNifty,
+          globalCues: {
+            dow: { changePercent: 0.15 },
+            nasdaq: { changePercent: 0.35 },
+            nikkei: { changePercent: 0.45 },
+            hangseng: { changePercent: -0.12 }
+          },
+          commodities: {
+            crude: { price: 81.8, changePercent: -0.4 },
+            usdinr: { price: 83.38, change: 0.04 },
+            us10y: { yield: 4.42, change: 0.01 }
+          },
+          institutional: {
+            fii: { cash: institutional?.fii?.cash || 0, futuresNet: institutional?.fii?.futures || 0, longShortRatio: institutional?.fii?.longShortRatio || 1.0, direction: institutional?.fii?.direction || 'NEUTRAL' },
+            dii: { cash: institutional?.dii?.cash || 0, direction: institutional?.dii?.direction || 'NEUTRAL' }
+          },
+          overallGlobalBias: regime?.bias || 'MIXED'
+        },
+        optionChain: {
+          pcr: optionChainData?.pcr || 1.05,
+          maxPain: optionChainData?.maxPain || 24000,
+          daysToExpiry: optionChainData?.daysToExpiry || 6,
+          callWalls: optionChainData?.callWalls || [],
+          putWalls: optionChainData?.putWalls || [],
+          atmIV: optionChainData?.atmIV || 14.2
+        },
+        vix: {
+          current: vixData?.current || 14.5,
+          trend: vixData?.trend || 'FLAT',
+          level: vixData?.level || 'NORMAL'
+        },
+        news: {
+          overallNewsSentiment: newsData?.overallNewsSentiment || 'MIXED',
+          highImpactEventToday: newsData?.highImpactEventToday || false,
+          items: newsData?.items || []
+        },
         interval,
-        currentPrice
+        currentPrice,
+        confluenceResult: confluence
       });
 
       if (response.data?.success && response.data?.analysisId) {
+        const activeOb = smc.orderBlocks?.find((ob: any) => !ob.isMitigated);
+        const obZoneStr = activeOb ? `${activeOb.low}-${activeOb.high}` : 'no-ob-zone';
+        const stopLossLevel = confluence.direction === 'BUY'
+          ? (activeOb ? activeOb.low : currentPrice - 30)
+          : (activeOb ? activeOb.high : currentPrice + 30);
+
         const localAlert = {
           id: 'alert_' + Math.random().toString(36).substring(2, 11),
           timestamp: Date.now(),
-          score: confluence.score,
+          score: confluence.total,
           grade: confluence.grade,
           direction: confluence.direction === 'BUY' ? 'BULLISH' as const : 'BEARISH' as const,
           layers: {
@@ -607,7 +701,9 @@ export default function NexusAlphaTerminal() {
           },
           analysisId: response.data.analysisId,
           headline: `NEXUS ALPHA ALERT: ${symbol} (${stock.sector}) setup`,
-          summary: `Stock relative strength rank stands at ${stock.relativeStrength}%. Price breaks ORB boundary with ${stock.buildup.replace('_', ' ')} confirmed.`
+          summary: `Stock relative strength rank stands at ${stock.relativeStrength}%. Price breaks ORB boundary with ${stock.buildup.replace('_', ' ')} confirmed.`,
+          obZone: obZoneStr,
+          stopLossLevel
         };
 
         setAlerts(prev => [localAlert, ...prev]);

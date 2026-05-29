@@ -1,5 +1,6 @@
 import axios from 'axios';
 import NodeCache from 'node-cache';
+import { cacheGet, cacheSet } from '../cache';
 
 // Create caches: one for cookies (expires in 15 mins), one for API responses (expires in 2 mins)
 const cookieCache = new NodeCache({ stdTTL: 900 });
@@ -82,6 +83,14 @@ export async function fetchNseApi(url: string): Promise<any> {
 
 // Fetch FII/DII Net Flow Cash Data
 export async function fetchFIIDIITrade(): Promise<any> {
+  const cacheKey = 'nse_fii_dii_trade_24h';
+  try {
+    const cached = await cacheGet(cacheKey);
+    if (cached) return cached;
+  } catch (err) {
+    console.warn('[FII DII CACHE GET ERROR]', err);
+  }
+
   const url = 'https://www.nseindia.com/api/fiidiiTradeReact';
   try {
     const rawData = await fetchNseApi(url);
@@ -94,7 +103,7 @@ export async function fetchFIIDIITrade(): Promise<any> {
       
       const date = fiiRecord?.date ?? new Date().toISOString().split('T')[0];
 
-      return {
+      const result = {
         fii: {
           cash: fiiRecord ? Math.round(parseFloat(fiiRecord.netValue)) : 0,
           futures: 0, // NSE cash endpoint doesn't return futures, we'll estimate or combine
@@ -108,6 +117,14 @@ export async function fetchFIIDIITrade(): Promise<any> {
         },
         date
       };
+
+      try {
+        await cacheSet(cacheKey, result, 86400); // Cache for 24 hours (86400 seconds)
+      } catch (err) {
+        console.warn('[FII DII CACHE SET ERROR]', err);
+      }
+
+      return result;
     }
     throw new Error('FII/DII response is not an array');
   } catch (error: any) {

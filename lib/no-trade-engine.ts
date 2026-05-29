@@ -1,12 +1,14 @@
-export interface NoTradeStatus {
-  isNoTradeActive: boolean;
-  blockReason: string;
-  advisoryLevel: 'CAUTION' | 'STRICT_LOCK' | 'NORMAL';
-  activeFilters: string[];
-  explanation: string;
-  recommendingAction: string;
+export interface NoTradeResult {
+  isNoTradeDay: boolean;
+  confidence: 'HIGH' | 'MEDIUM';
+  reasons: string[];
+  resumeAfter: string | null;
 }
 
+/**
+ * Checks all deterministic hard and soft block rules to safeguard capital.
+ * 100% deterministic, never makes AI calls.
+ */
 export function detectNoTradeCondition(data: {
   vix: number;
   regimeType: 'TRENDING_UP' | 'TRENDING_DOWN' | 'RANGING' | 'CHOPPY';
@@ -14,91 +16,88 @@ export function detectNoTradeCondition(data: {
   fiiNetCash: number;
   diiNetCash: number;
   timeOfDayMinutes?: number; // Minutes from 09:15, e.g. 0 to 375
-  totalIndexVolume?: number;
-  averageVolume?: number;
-}): NoTradeStatus {
-  const activeFilters: string[] = [];
-  let isNoTradeActive = false;
-  let advisoryLevel: NoTradeStatus['advisoryLevel'] = 'NORMAL';
-  let blockReason = 'Market conditions stable. Tactical participation approved.';
-  let explanation = 'Unified institutional indicators show positive confluence. Key constituent weights are aligned with sector rotations.';
-  let recommendingAction = 'Maintain standard position sizing. Scan for A+ breakouts near major 5M/15M order blocks.';
+  isHighImpactEventToday?: boolean;
+  isHolidayTomorrow?: boolean;
+  volumePercentOfAverage?: number; // E.g., 50 for 50%
+}): NoTradeResult {
+  const reasons: string[] = [];
+  let isNoTradeDay = false;
+  let resumeAfter: string | null = null;
 
-  // 1. High Volatility Lock (VIX > 18)
-  if (data.vix > 18) {
-    isNoTradeActive = true;
-    advisoryLevel = data.vix > 22 ? 'STRICT_LOCK' : 'CAUTION';
-    activeFilters.push('HIGH_VOLATILITY_LOCK');
-    blockReason = 'India VIX Spikes — Reduced follow-through with elevated premium decay.';
+  // If outside active market hours, disable safety blocks so mock/replay scoring calculates correctly
+  if (data.timeOfDayMinutes !== undefined && data.timeOfDayMinutes < 0) {
+    return {
+      isNoTradeDay: false,
+      confidence: 'MEDIUM',
+      reasons: [],
+      resumeAfter: null
+    };
   }
 
-  // 2. Choppy or Ranging Index Regime
-  if (data.regimeType === 'CHOPPY' || data.regimeType === 'RANGING') {
-    isNoTradeActive = true;
-    if (advisoryLevel !== 'STRICT_LOCK') advisoryLevel = 'CAUTION';
-    activeFilters.push('INDEX_CONSOLIDATION_LOCK');
-    if (blockReason.includes('stable')) {
-      blockReason = 'Index Choppiness — Spot range-bound with high probability of breakout failure.';
-    }
+  // 1. HARD BLOCKS (Strict protection)
+  
+  // A. Extreme Volatility (VIX > 25)
+  if (data.vix > 25) {
+    isNoTradeDay = true;
+    reasons.push('HIGH VIX VOLATILITY LOCK: India VIX above 25 makes premium sizing highly unsafe.');
   }
 
-  // 3. Mixed / Divergent Sector Rotation
-  const sectorSpread = Math.abs(data.sectorDispersion.strongestChange - data.sectorDispersion.weakestChange);
-  const isDivergentSectors = data.sectorDispersion.strongestChange > 0 && data.sectorDispersion.weakestChange < 0;
-  if (isDivergentSectors && sectorSpread < 1.0) {
-    isNoTradeActive = true;
-    activeFilters.push('MIXED_SECTOR_DISPERSION');
-    if (blockReason.includes('stable')) {
-      blockReason = 'Divergent Sector Participation — Lacks institutional rotation support.';
-    }
+  // B. High Impact Event Today (RBI, Budget, Fed)
+  if (data.isHighImpactEventToday) {
+    isNoTradeDay = true;
+    reasons.push('EVENT RISK LOCK: RBI Policy, Union Budget, or Fed Decision today. Cease trading.');
   }
 
-  // 4. Weak / Flat Institutional Inflows
-  const absoluteCombinedInflow = Math.abs(data.fiiNetCash + data.diiNetCash);
-  const conflictingInstitutions = (data.fiiNetCash < 0 && data.diiNetCash > 0) || (data.fiiNetCash > 0 && data.diiNetCash < 0);
-  if (absoluteCombinedInflow < 300 || (conflictingInstitutions && Math.abs(data.fiiNetCash) < 500)) {
-    isNoTradeActive = true;
-    activeFilters.push('WEAK_INSTITUTIONAL_VOLUME');
-    if (blockReason.includes('stable')) {
-      blockReason = 'Apathy in Institutional Blocks — Flat FII/DII cumulative cash balances.';
-    }
-  }
-
-  // 5. High-Risk Buffer Windows (Opening and Closing)
+  // C. Timing Bracket Buffer Windows
   if (data.timeOfDayMinutes !== undefined) {
-    const isOpeningBuffer = data.timeOfDayMinutes <= 15; // 09:15 - 09:30
-    const isClosingBuffer = data.timeOfDayMinutes >= 360; // 15:15 - 15:30 (Market closes at 15:30, i.e. 375 mins)
+    const isOpeningBuffer = data.timeOfDayMinutes >= 0 && data.timeOfDayMinutes <= 15; // 09:15 - 09:30
+    const isClosingBuffer = data.timeOfDayMinutes >= 360 && data.timeOfDayMinutes <= 375; // 15:15 - 15:30
+    
     if (isOpeningBuffer) {
-      isNoTradeActive = true;
-      advisoryLevel = 'STRICT_LOCK';
-      activeFilters.push('OPENING_BUFFER_LOCK');
-      blockReason = 'Opening Bracket Risk — High spread volatility during initial order matching.';
+      isNoTradeDay = true;
+      reasons.push('OPENING VOLATILITY BUFFER: High spread risk matching during 09:15 - 09:30.');
+      resumeAfter = '09:30 AM';
     } else if (isClosingBuffer) {
-      isNoTradeActive = true;
-      advisoryLevel = 'STRICT_LOCK';
-      activeFilters.push('CLOSING_LIQUIDITY_BUFFER');
-      blockReason = 'Closing Liquidity Risk — Intraday position squarings trigger random fills.';
+      isNoTradeDay = true;
+      reasons.push('CLOSING LIQUIDITY BUFFER: Margin squaring volatility during 15:15 - 15:30.');
+      resumeAfter = 'Tomorrow';
     }
   }
 
-  // 6. Generate granular explanations
-  if (isNoTradeActive) {
-    const filtersList = activeFilters.join(' & ');
-    explanation = `The system has triggered a strict **NO-TRADE ADVOCACY** due to ${filtersList}. Historical testing shows taking setups in these regimes yields a negative mathematical expectancy, leading to rapid capital drawdown.`;
-    
-    if (advisoryLevel === 'STRICT_LOCK') {
-      recommendingAction = '❌ STRICT OVERRIDE: De-leverage completely. Cease scanning and close active positions. Preserve equity.';
-    } else {
-      recommendingAction = '⚠️ DEFENSIVE STANCE: Reduce typical risk per trade by 75%. Prioritize minor cash targets (scalping) or wait for a clear institutional block sweep.';
-    }
+  // D. Holiday Tomorrow
+  if (data.isHolidayTomorrow) {
+    isNoTradeDay = true;
+    reasons.push('HOLIDAY LIQUIDITY BUFFER: Holiday tomorrow triggers low liquidity and wide spreads today.');
   }
+
+  // 2. SOFT BLOCKS (Triggers caution)
+  
+  // A. Weak FII/DII Joint Distribution
+  if (data.fiiNetCash < 0 && data.diiNetCash < 0) {
+    reasons.push('CAUTION: Both FII and DII are net cash market sellers today.');
+  }
+
+  // B. Global Index Distribution Panic
+  if (data.volumePercentOfAverage !== undefined && data.volumePercentOfAverage < 60) {
+    reasons.push('CAUTION: Session volume is below 60% of the 20-day historical average.');
+  }
+
+  // C. Range Bound / Contradicting Sectors
+  const sectorSpread = Math.abs(data.sectorDispersion.strongestChange - data.sectorDispersion.weakestChange);
+  const isDivergent = data.sectorDispersion.strongestChange > 0 && data.sectorDispersion.weakestChange < 0;
+  if (isDivergent && sectorSpread < 1.0) {
+    reasons.push('CAUTION: Mixed sector rotation indicates lack of clear institutional participation.');
+  }
+
+  // Resolve confidence level
+  const confidence = reasons.filter(r => r.startsWith('HIGH') || r.startsWith('EVENT') || r.startsWith('OPENING') || r.startsWith('CLOSING')).length >= 2 
+    ? 'HIGH' 
+    : 'MEDIUM';
 
   return {
-    isNoTradeActive,
-    blockReason,
-    advisoryLevel,
-    activeFilters,
-    explanation,
-    recommendingAction
+    isNoTradeDay: isNoTradeDay || reasons.length >= 3,
+    confidence,
+    reasons,
+    resumeAfter
   };
 }
