@@ -23,13 +23,32 @@ export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
-// Mock database store for fallback
+const DATA_DIR = path.join(process.cwd(), 'data');
+const JOURNAL_FILE = path.join(DATA_DIR, 'journal.json');
+
 class MockDatabase {
   private alerts: any[] = [];
   private journal: any[] = [];
   private reports: any[] = [];
 
   constructor() {
+    // Ensure data directory exists
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+
+    // Load from journal file if exists, else start empty
+    try {
+      if (fs.existsSync(JOURNAL_FILE)) {
+        this.journal = JSON.parse(fs.readFileSync(JOURNAL_FILE, 'utf8'));
+      } else {
+        this.journal = [];
+        this.saveJournalToFile();
+      }
+    } catch {
+      this.journal = [];
+    }
+
     this.alerts = [
       {
         id: 'mock_alert_1',
@@ -47,26 +66,14 @@ class MockDatabase {
         status: 'PENDING'
       }
     ];
+  }
 
-    this.journal = [
-      {
-        id: 'mock_journal_1',
-        date: new Date().toISOString().split('T')[0],
-        alert_id: 'mock_alert_1',
-        entry_price: 24010,
-        exit_price: 24090,
-        direction: 'BUY',
-        result: 'WIN',
-        pnl: 2000,
-        rr_achieved: 4,
-        setup_type: 'Order Block Mitigation',
-        session: 'FIRST_WINDOW',
-        notes: 'Clean execution. Retraced perfectly into 5M bullish OB and bounced aggressively to target 1.',
-        market_condition: 'Trending Up',
-        emotion: 'calm',
-        rating: 5
-      }
-    ];
+  private saveJournalToFile() {
+    try {
+      fs.writeFileSync(JOURNAL_FILE, JSON.stringify(this.journal, null, 2), 'utf8');
+    } catch (err) {
+      console.error('[MOCK DB] Failed to save journal to file:', err);
+    }
   }
 
   async getAlerts() {
@@ -75,7 +82,7 @@ class MockDatabase {
 
   async insertAlert(alert: any) {
     const newAlert = {
-      id: `alert_${Math.random().toString(36).substring(2, 9)}`,
+      id: alert.id || `alert_${Math.random().toString(36).substring(2, 9)}`,
       created_at: new Date().toISOString(),
       ...alert
     };
@@ -97,17 +104,49 @@ class MockDatabase {
 
   async insertJournal(entry: any) {
     const newEntry = {
-      id: `journal_${Math.random().toString(36).substring(2, 9)}`,
-      date: new Date().toISOString().split('T')[0],
+      id: entry.id || `journal_${Math.random().toString(36).substring(2, 9)}`,
+      date: entry.date || new Date().toISOString().split('T')[0],
+      created_at: new Date().toISOString(),
       ...entry
     };
     this.journal.unshift(newEntry);
+    this.saveJournalToFile();
     return { data: newEntry, error: null };
   }
 
   async deleteJournalEntry(id: string) {
     this.journal = this.journal.filter(j => j.id !== id);
+    this.saveJournalToFile();
     return { error: null };
+  }
+
+  async updateJournalEntryByAlertId(alertId: string, updates: any) {
+    const entry = this.journal.find(j => j.alert_id === alertId);
+    if (entry) {
+      Object.assign(entry, updates);
+      this.saveJournalToFile();
+      return entry;
+    }
+    
+    // If not found, let's create a new entry with this alertId and updates
+    const newEntry = {
+      id: `journal_${Math.random().toString(36).substring(2, 9)}`,
+      alert_id: alertId,
+      date: new Date().toISOString().split('T')[0],
+      created_at: new Date().toISOString(),
+      ...updates
+    };
+    this.journal.unshift(newEntry);
+    this.saveJournalToFile();
+    return newEntry;
+  }
+
+  async updateJournalAiAnalysis(alertId: string, fullText: string) {
+    const entry = this.journal.find(j => j.alert_id === alertId);
+    if (entry) {
+      entry.ai_analysis = fullText;
+      this.saveJournalToFile();
+    }
   }
 }
 

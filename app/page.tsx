@@ -61,6 +61,17 @@ export default function NexusAlphaTerminal() {
   // AI alerts feed state
   const [alerts, setAlerts] = useState<any[]>([]);
 
+  // Toast overlay states
+  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
+  
+  // Daily report generation gating state
+  const [reportGeneratedToday, setReportGeneratedToday] = useState(false);
+
+  const showToast = (text: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToastMessage({ text, type });
+    setTimeout(() => setToastMessage(null), 5000);
+  };
+
   // Navigation Tab State
   const [activeTab, setActiveTab] = useState<'WAR-ROOM' | 'JOURNAL'>('WAR-ROOM');
 
@@ -445,6 +456,38 @@ export default function NexusAlphaTerminal() {
       setOptionChainData(optionChain);
       setError(null);
       setLastUpdated(new Date().toLocaleTimeString('en-US', { hour12: false }));
+
+      // 🕒 Automated Daily Intelligence Report Generation (at >= 15:35 IST)
+      const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+      const hours = nowIST.getHours();
+      const minutes = nowIST.getMinutes();
+      const isAfterReportTime = (hours > 15) || (hours === 15 && minutes >= 35);
+      const isTradingDay = nowIST.getDay() >= 1 && nowIST.getDay() <= 5;
+
+      if (isAfterReportTime && isTradingDay && !reportGeneratedToday) {
+        setReportGeneratedToday(true);
+        showToast("Daily report generating...", "info");
+        
+        const yyyy = nowIST.getFullYear();
+        const mm = String(nowIST.getMonth() + 1).padStart(2, '0');
+        const dd = String(nowIST.getDate()).padStart(2, '0');
+        const todayDateStr = `${yyyy}-${mm}-${dd}`;
+
+        axios.post('/api/reports', {
+          type: 'DAILY',
+          dateString: todayDateStr
+        }).then(res => {
+          if (res.data?.success) {
+            showToast("Daily report generated successfully!", "success");
+            fetchReports(); // Refresh list
+          } else {
+            showToast("Daily report generation failed.", "error");
+          }
+        }).catch(err => {
+          console.error('[AUTO-REPORT ERROR]', err);
+          showToast("Daily report generation encountered an error.", "error");
+        });
+      }
     } catch (err: any) {
       console.error('[NEXUS ALPHA POLL ERROR]', err);
       setError('Terminal interface handshake failed.');
@@ -707,8 +750,12 @@ export default function NexusAlphaTerminal() {
           ? (activeOb ? activeOb.low : currentPrice - 30)
           : (activeOb ? activeOb.high : currentPrice + 30);
 
+        const riskAmount = Math.abs(currentPrice - stopLossLevel) || 30;
+        const target1 = confluence.direction === 'BUY' ? (currentPrice + riskAmount * 1.5) : (currentPrice - riskAmount * 1.5);
+        const target2 = confluence.direction === 'BUY' ? (currentPrice + riskAmount * 2.5) : (currentPrice - riskAmount * 2.5);
+
         const localAlert = {
-          id: 'alert_' + Math.random().toString(36).substring(2, 11),
+          id: response.data.analysisId, // Sync local ID with API analysis ID
           timestamp: Date.now(),
           score: confluence.total,
           grade: confluence.grade,
@@ -724,8 +771,61 @@ export default function NexusAlphaTerminal() {
           headline: `NEXUS ALPHA ALERT: ${symbol} (${stock.sector}) setup`,
           summary: `Stock relative strength rank stands at ${stock.relativeStrength}%. Price breaks ORB boundary with ${stock.buildup.replace('_', ' ')} confirmed.`,
           obZone: obZoneStr,
-          stopLossLevel
+          stopLossLevel,
+          target1,
+          target2
         };
+
+        // 💾 Auto-save fired A/A+ alert directly to the journal
+        const journalPayload = {
+          alert_id: response.data.analysisId,
+          date: new Date().toISOString().split('T')[0],
+          alert_time: Date.now(),
+          grade: confluence.grade,
+          confluence_score: confluence.total,
+          direction: confluence.direction,
+          entry_zone: obZoneStr,
+          stop_loss: stopLossLevel,
+          target1: target1,
+          target2: target2,
+          
+          layer1_macro_score: confluence.layers.macro.score,
+          layer1_macro_reason: confluence.layers.macro.reason,
+          layer2_institutional_score: confluence.layers.institutional.score,
+          layer2_fii_flow: institutional?.fii?.cash?.toString() || '0',
+          layer2_dii_flow: institutional?.dii?.cash?.toString() || '0',
+          layer2_participant_oi: participantOI?.fii?.direction || 'NEUTRAL',
+          layer3_options_score: confluence.layers.options.score,
+          layer3_pcr: optionChainData?.pcr || 1.0,
+          layer3_vix: vixData?.current || 14.5,
+          layer3_max_pain: optionChainData?.maxPain || 24000,
+          layer4_smc_score: confluence.layers.structure.score,
+          layer4_signals: smc.signals.map((s: any) => s.type),
+          layer5_risk_score: confluence.layers.risk.score,
+          layer5_session: risk.session || '',
+          
+          gift_nifty_gap: giftNifty?.gap?.toString() || giftNifty?.gapPoints?.toString() || '0',
+          global_bias: regime?.bias || 'MIXED',
+          sector_leading: sector?.name || 'NIFTY IT',
+          
+          ai_analysis: '',
+          trader_action: 'PENDING',
+          skip_reason: null,
+          entry_price: null,
+          exit_price: null,
+          exit_time: null,
+          result: null,
+          pnl_points: null,
+          rr_achieved: null,
+          mistake_type: null,
+          notes: null,
+          kite_trade_id: null,
+          kite_auto_fetched: false
+        };
+
+        axios.post('/api/journal', journalPayload)
+          .then(() => showToast(`Auto-Journaled ${confluence.grade} Alert!`, 'success'))
+          .catch(err => console.warn('[AUTO JOURNAL SAVE ERROR]', err));
 
         setAlerts(prev => [localAlert, ...prev]);
       }
@@ -823,6 +923,18 @@ export default function NexusAlphaTerminal() {
 
   return (
     <div className="min-h-screen bg-[#050508] text-[#e6e6e6] flex flex-col font-sans pb-16">
+      {/* Toast Notification Overlay */}
+      {toastMessage && (
+        <div className={`fixed top-4 right-4 p-4 border rounded text-[11px] font-mono font-bold flex items-center space-x-3 z-[99999] bg-[#0d1117]/95 shadow-2xl transition-all duration-500 ${
+          toastMessage.type === 'success' 
+            ? 'border-[#00e5a0]/40 text-[#00e5a0]' 
+            : toastMessage.type === 'error'
+            ? 'border-[#ff3a3a]/40 text-[#ff3a3a]'
+            : 'border-[#f0a500]/40 text-[#f0a500]'
+        }`}>
+          <span>{toastMessage.text}</span>
+        </div>
+      )}
       
       {/* 1. Market Regime Sticky Bar */}
       <GlobalContextBar 

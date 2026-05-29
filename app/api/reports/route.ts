@@ -1,5 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getLocalReportsList, compileMarketReport, getLocalReportByFilename } from '@/lib/report-engine';
+import { sendTelegramTextMessage } from '@/lib/telegram-notifier';
+import fs from 'fs';
+import path from 'path';
+
+function getSavedSettings() {
+  const filePath = path.join(process.cwd(), 'settings.json');
+  if (!fs.existsSync(filePath)) return {};
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch {
+    return {};
+  }
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -37,6 +50,23 @@ export async function POST(request: NextRequest) {
     }
 
     const report = await compileMarketReport(type, dateString);
+
+    // Automatically trigger Telegram message for daily reports
+    if (type === 'DAILY') {
+      const settings = getSavedSettings();
+      if (settings.telegramToggle && settings.telegramBotToken && settings.telegramChatId) {
+        try {
+          await sendTelegramTextMessage(
+            settings.telegramBotToken,
+            settings.telegramChatId,
+            `📊 <b>Daily report ready</b> — check Reports tab for date ${dateString}`
+          );
+        } catch (tgErr) {
+          console.warn('[REPORTS API] Telegram dispatch failed:', tgErr);
+        }
+      }
+    }
+
     return NextResponse.json({ success: true, report, message: `${type} report generated successfully` });
   } catch (error: any) {
     console.error('[REPORTS POST API] Error:', error.message);

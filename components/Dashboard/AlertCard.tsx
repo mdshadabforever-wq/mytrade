@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronDown, ChevronUp, Check, X, ShieldAlert, Zap, Layers, Sparkles } from 'lucide-react';
+import axios from 'axios';
 
 export interface AlertCardProps {
   alert: {
     id: string;
     timestamp: number;
     score: number;
-    grade: 'HIGH' | 'MEDIUM' | 'LOW' | 'NO TRADE';
-    direction: 'BULLISH' | 'BEARISH' | 'MIXED';
+    grade: string;
+    direction: string;
     layers: {
       macro: any;
       institutional: any;
@@ -18,6 +19,8 @@ export interface AlertCardProps {
     analysisId?: string;
     headline: string;
     summary: string;
+    obZone?: string;
+    stopLossLevel?: number;
   };
   onDismiss: (id: string) => void;
 }
@@ -29,6 +32,126 @@ export function AlertCard({ alert, onDismiss }: AlertCardProps) {
   const [error, setError] = useState<string | null>(null);
   const [isNoted, setIsNoted] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
+
+  // Trade tracking state machine states
+  const [tradeState, setTradeState] = useState<'PENDING' | 'TAKEN' | 'SKIPPED'>('PENDING');
+  const [entryPrice, setEntryPrice] = useState('');
+  const [exitPrice, setExitPrice] = useState('');
+  const [tradeResult, setTradeResult] = useState<'WIN' | 'LOSS' | 'BE' | null>(null);
+  const [mistakeType, setMistakeType] = useState('NONE');
+  const [notes, setNotes] = useState('');
+  const [skipReason, setSkipReason] = useState('Setup weak laga');
+  const [kiteStatus, setKiteStatus] = useState<string>('');
+  const [isSaved, setIsSaved] = useState(false);
+
+  // Initialize entry price mid-point when TAKEN is selected
+  useEffect(() => {
+    if (tradeState === 'TAKEN' && !entryPrice) {
+      const zone = alert.obZone || '';
+      const clean = zone.replace(/\s/g, '');
+      const parts = clean.split('-');
+      if (parts.length === 2) {
+        const mid = (Number(parts[0]) + Number(parts[1])) / 2;
+        setEntryPrice(mid.toString());
+      } else {
+        const fallback = Number(clean) || (alert.stopLossLevel ? (alert.direction === 'BULLISH' ? alert.stopLossLevel + 30 : alert.stopLossLevel - 30) : 24000);
+        setEntryPrice(fallback.toString());
+      }
+    }
+  }, [tradeState, alert, entryPrice]);
+
+  // Kite auto-fetch completed order lookup
+  useEffect(() => {
+    if (tradeState === 'TAKEN') {
+      setKiteStatus('Kite se auto-fetch karne ki koshish ho rahi hai...');
+      
+      const fetchKiteTrade = async () => {
+        try {
+          const dateToday = new Date().toISOString().split('T')[0];
+          const directionParam = alert.direction === 'BULLISH' ? 'BUY' : 'SELL';
+          const entryZoneParam = alert.obZone || '24000';
+          const alertTimeParam = alert.timestamp;
+
+          const response = await axios.get(
+            `/api/kite-trades?date=${dateToday}&direction=${directionParam}&entry_zone=${entryZoneParam}&alert_time=${alertTimeParam}`
+          );
+
+          if (response.data?.success && response.data?.kite_available) {
+            if (response.data.matched?.auto_match) {
+              const matched = response.data.matched;
+              setEntryPrice(matched.entry_price.toString());
+              setKiteStatus(`Kite trade auto-matched! Entry: ₹${matched.entry_price} (${matched.tradingsymbol})`);
+            } else {
+              setKiteStatus('Kite connection active, but no matching order found.');
+            }
+          } else if (response.data?.success && !response.data?.kite_available) {
+            setKiteStatus('Kite integration not configured in Settings. Manual entry required.');
+          } else {
+            setKiteStatus(response.data?.error || 'Failed to search Kite trades.');
+          }
+        } catch (err) {
+          console.warn('[KITE AUTO-FETCH ERROR]', err);
+          setKiteStatus('Kite lookup failed due to network or connection issue.');
+        }
+      };
+
+      fetchKiteTrade();
+    }
+  }, [tradeState, alert]);
+
+  const handleSaveTrade = async () => {
+    try {
+      const updates = {
+        trader_action: 'TAKEN',
+        entry_price: entryPrice ? Number(entryPrice) : null,
+        exit_price: exitPrice ? Number(exitPrice) : null,
+        result: tradeResult,
+        pnl_points: (entryPrice && exitPrice) 
+          ? (alert.direction === 'BULLISH' ? Number(exitPrice) - Number(entryPrice) : Number(entryPrice) - Number(exitPrice)) 
+          : null,
+        rr_achieved: (entryPrice && exitPrice && alert.stopLossLevel)
+          ? Math.abs(Number(exitPrice) - Number(entryPrice)) / Math.abs(Number(entryPrice) - alert.stopLossLevel)
+          : null,
+        mistake_type: tradeResult === 'LOSS' ? mistakeType : 'NONE',
+        notes: notes || '',
+        kite_auto_fetched: kiteStatus.includes('auto-matched')
+      };
+
+      const res = await axios.patch('/api/journal', {
+        alert_id: alert.id,
+        ...updates
+      });
+
+      if (res.data?.success) {
+        setIsSaved(true);
+        setIsNoted(true);
+      }
+    } catch (err) {
+      console.error('[SAVE TRADE ERROR]', err);
+    }
+  };
+
+  const handleSaveSkip = async () => {
+    try {
+      const updates = {
+        trader_action: 'SKIPPED',
+        skip_reason: skipReason,
+        notes: `Skipped: ${skipReason}`
+      };
+
+      const res = await axios.patch('/api/journal', {
+        alert_id: alert.id,
+        ...updates
+      });
+
+      if (res.data?.success) {
+        setIsSaved(true);
+        setIsNoted(true);
+      }
+    } catch (err) {
+      console.error('[SAVE SKIP ERROR]', err);
+    }
+  };
 
   // Border color based on conviction level
   let borderClass = 'border-l-4 border-l-[#8892a4]';
@@ -198,25 +321,165 @@ export function AlertCard({ alert, onDismiss }: AlertCardProps) {
             </pre>
           )}
 
-          {/* Bottom Card Actions */}
-          <div className="flex justify-end space-x-2 border-t border-[#21262d] pt-3 mt-3">
-            <button 
-              onClick={handleNoted}
-              className={`text-[9px] px-2.5 py-1 rounded border font-bold flex items-center space-x-1 transition-all duration-300 ${
-                isNoted 
-                  ? 'bg-transparent text-[#8892a4] border-[#21262d]' 
-                  : 'bg-[#00e5a0]/10 text-[#00e5a0] border-[#00e5a0]/25 hover:bg-[#00e5a0]/20'
-              }`}
-            >
-              <Check className="w-3 h-3" />
-              <span>{isNoted ? 'NOTED' : 'MARK AS NOTED'}</span>
-            </button>
+          {/* Bottom Trade Tracking State Machine */}
+          <div className="border-t border-[#21262d] bg-[#090d13]/70 p-3 mt-3 rounded font-mono text-[10px]">
+            {isSaved ? (
+              <div className="flex items-center space-x-2 text-[#00e5a0] py-1">
+                <Check className="w-4 h-4 animate-bounce" />
+                <span className="font-bold uppercase text-[10px]">TRADE JOURNAL ENTRY RECORDED SUCCESS</span>
+              </div>
+            ) : tradeState === 'PENDING' ? (
+              <div className="flex flex-col space-y-2">
+                <div className="text-[9px] text-[#8892a4] font-bold uppercase tracking-wider">JOURNAL WORKFLOW CONSOLE:</div>
+                <div className="flex space-x-2">
+                  <button 
+                    onClick={() => setTradeState('TAKEN')}
+                    className="flex-1 bg-[#00e5a0]/10 text-[#00e5a0] border border-[#00e5a0]/30 hover:bg-[#00e5a0]/20 py-1.5 px-3 rounded font-bold transition-all duration-300 flex items-center justify-center space-x-1"
+                  >
+                    <span>✓ TRADE LIYA</span>
+                  </button>
+                  <button 
+                    onClick={() => setTradeState('SKIPPED')}
+                    className="flex-1 bg-[#ff3a3a]/10 text-[#ff3a3a] border border-[#ff3a3a]/30 hover:bg-[#ff3a3a]/20 py-1.5 px-3 rounded font-bold transition-all duration-300 flex items-center justify-center space-x-1"
+                  >
+                    <span>✗ SKIP KIYA</span>
+                  </button>
+                </div>
+              </div>
+            ) : tradeState === 'TAKEN' ? (
+              <div className="flex flex-col space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[#00e5a0] font-bold uppercase">STATE: TRADE ACTIVE</span>
+                  <button onClick={() => setTradeState('PENDING')} className="text-[8px] text-[#8892a4] hover:text-white underline">CANCEL</button>
+                </div>
+                
+                {/* Kite fetch indicator */}
+                <div className="text-[8.5px] text-cyan-400 bg-cyan-950/20 border border-cyan-900/30 p-1.5 rounded">
+                  {kiteStatus}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[8px] text-[#8892a4] uppercase font-bold">Entry Price</label>
+                    <input 
+                      type="number" 
+                      value={entryPrice} 
+                      onChange={e => setEntryPrice(e.target.value)}
+                      className="w-full bg-[#050508] border border-[#21262d] text-white p-1 rounded mt-0.5 outline-none focus:border-[#00e5a0]/50" 
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[8px] text-[#8892a4] uppercase font-bold">Exit Price</label>
+                    <input 
+                      type="number" 
+                      value={exitPrice} 
+                      onChange={e => setExitPrice(e.target.value)}
+                      className="w-full bg-[#050508] border border-[#21262d] text-white p-1 rounded mt-0.5 outline-none focus:border-[#00e5a0]/50" 
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[8px] text-[#8892a4] uppercase font-bold block mb-1">Result</label>
+                  <div className="flex space-x-1.5">
+                    {(['WIN', 'LOSS', 'BE'] as const).map(res => (
+                      <button
+                        key={res}
+                        type="button"
+                        onClick={() => setTradeResult(res)}
+                        className={`flex-1 py-1 rounded font-bold transition-all border text-[9px] ${
+                          tradeResult === res
+                            ? res === 'WIN'
+                              ? 'bg-[#00e5a0]/25 text-[#00e5a0] border-[#00e5a0]'
+                              : res === 'LOSS'
+                              ? 'bg-[#ff3a3a]/25 text-[#ff3a3a] border-[#ff3a3a]'
+                              : 'bg-cyan-500/25 text-cyan-400 border-cyan-500'
+                            : 'bg-[#050508] text-[#8892a4] border-[#21262d] hover:bg-[#0d1117]'
+                        }`}
+                      >
+                        {res}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {tradeResult === 'LOSS' && (
+                  <div>
+                    <label className="text-[8px] text-[#ff3a3a] uppercase font-bold">Mistake Type</label>
+                    <select
+                      value={mistakeType}
+                      onChange={e => setMistakeType(e.target.value)}
+                      className="w-full bg-[#050508] border border-[#ff3a3a]/25 text-white p-1 rounded mt-0.5 outline-none focus:border-[#ff3a3a]/50 text-[9.5px]"
+                    >
+                      <option value="NONE">-- Select Mistake --</option>
+                      <option value="FOMO entry">FOMO entry</option>
+                      <option value="SL nahi lagaya">SL nahi lagaya</option>
+                      <option value="Early exit">Early exit</option>
+                      <option value="Against trend">Against trend</option>
+                      <option value="News time entry">News time entry</option>
+                      <option value="Overtrading">Overtrading</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-[8px] text-[#8892a4] uppercase font-bold">Notes (Optional)</label>
+                  <textarea 
+                    value={notes} 
+                    onChange={e => setNotes(e.target.value)}
+                    placeholder="Enter execution remarks..."
+                    className="w-full bg-[#050508] border border-[#21262d] text-white p-1 rounded mt-0.5 h-10 outline-none resize-none text-[9.5px] focus:border-[#00e5a0]/50" 
+                  />
+                </div>
+
+                <button 
+                  onClick={handleSaveTrade}
+                  className="w-full bg-[#00e5a0] text-black hover:bg-[#00e5a0]/90 py-1 rounded font-bold transition-all duration-300 uppercase tracking-wider text-[9.5px]"
+                >
+                  SAVE TRADE DETAILS
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[#ff3a3a] font-bold uppercase">STATE: SKIPPED</span>
+                  <button onClick={() => setTradeState('PENDING')} className="text-[8px] text-[#8892a4] hover:text-white underline">CANCEL</button>
+                </div>
+
+                <div>
+                  <label className="text-[8px] text-[#8892a4] uppercase font-bold">Skip Reason</label>
+                  <select
+                    value={skipReason}
+                    onChange={e => setSkipReason(e.target.value)}
+                    className="w-full bg-[#050508] border border-[#21262d] text-white p-1.5 rounded mt-0.5 outline-none focus:border-[#ff3a3a]/50 text-[9.5px]"
+                  >
+                    <option value="Setup weak laga">Setup weak laga</option>
+                    <option value="News risk tha">News risk tha</option>
+                    <option value="Already 3 trades le chuke">Already 3 trades le chuke</option>
+                    <option value="Session avoid window">Session avoid window</option>
+                    <option value="Mera conviction nahi tha">Mera conviction nahi tha</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <button 
+                  onClick={handleSaveSkip}
+                  className="w-full bg-[#ff3a3a] text-white hover:bg-[#ff3a3a]/90 py-1 rounded font-bold transition-all duration-300 uppercase tracking-wider text-[9.5px]"
+                >
+                  SAVE SKIP
+                </button>
+              </div>
+            )}
+          </div>
+          
+          <div className="flex justify-end space-x-2 pt-2 border-t border-[#21262d]/40">
             <button 
               onClick={() => onDismiss(alert.id)}
-              className="text-[9px] px-2.5 py-1 bg-transparent text-[#ff3a3a] border border-[#ff3a3a]/25 hover:bg-[#ff3a3a]/10 rounded font-bold flex items-center space-x-1 transition-all duration-300"
+              className="text-[8.5px] px-2 py-0.5 bg-transparent text-[#ff3a3a] border border-[#ff3a3a]/25 hover:bg-[#ff3a3a]/10 rounded font-bold flex items-center space-x-1 transition-all duration-300"
             >
-              <X className="w-3 h-3" />
-              <span>DISMISS SIGNAL</span>
+              <X className="w-2.5 h-2.5" />
+              <span>DISMISS ALERT</span>
             </button>
           </div>
         </div>
