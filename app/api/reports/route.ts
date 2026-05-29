@@ -56,10 +56,58 @@ export async function POST(request: NextRequest) {
       const settings = getSavedSettings();
       if (settings.telegramToggle && settings.telegramBotToken && settings.telegramChatId) {
         try {
+          // Parse today's verdict from the report markdown
+          const verdictRegex = /##\s*🎯\s*Aaj\s*Ka\s*Verdict\s*—\s*([^\n\r#\-]+)/i;
+          const match = report.markdown.match(verdictRegex);
+          let verdict = match ? match[1].trim() : 'N/A';
+
+          if (verdict === 'N/A') {
+            const fallbackMatch = report.markdown.match(/##\s*1\.\s*SESSION\s*VERDICT\s*[\r\n]+([^\r\n]+)/i);
+            if (fallbackMatch) {
+              verdict = fallbackMatch[1].trim();
+            }
+          }
+
+          if (verdict === 'N/A' && report.rawReport) {
+            verdict = report.rawReport.marketRegime || 'A-DAY';
+          }
+
+          // Identify the best alert based on confluence_score descending
+          let alertSummary = 'None today';
+          if (report.rawReport && Array.isArray(report.rawReport.alertsList) && report.rawReport.alertsList.length > 0) {
+            const sortedAlerts = [...report.rawReport.alertsList].sort((a: any, b: any) => (b.confluence_score || 0) - (a.confluence_score || 0));
+            const bestAlert = sortedAlerts[0];
+            const bestStock = bestAlert.stock || bestAlert.sector_leading || 'NIFTY';
+            const bestDir = bestAlert.direction || bestAlert.type || 'LONG';
+            const bestGrade = bestAlert.grade || 'A';
+            const bestScore = bestAlert.confluence_score || bestAlert.confidence || 0;
+            alertSummary = `${bestGrade} ${bestDir} on ${bestStock} (Score: ${bestScore}%)`;
+          }
+
+          // Build keyLevel: S/R bands around Nifty Close
+          const closeVal = report.rawReport?.niftyClose || 24050;
+          const sLevel = Math.round(closeVal - 100);
+          const rLevel = Math.round(closeVal + 100);
+          const keyLevel = `S: ${sLevel} | R: ${rLevel}`;
+
+          // Extra details
+          const formattedClose = report.rawReport?.niftyClose || closeVal;
+          const rawChange = report.rawReport?.niftyChangePercent || 0.0;
+          const formattedChange = (rawChange >= 0 ? '+' : '') + rawChange;
+          const formattedBias = report.rawReport?.bias || 'NEUTRAL';
+
+          // Construct rich HTML-formatted 10-line Telegram message
+          const richMessage = `📊 <b>${dateString} Market Summary</b>
+Verdict: <b>${verdict}</b>
+Nifty: <b>${formattedClose}</b> (${formattedChange}%)
+Best setup: <b>${alertSummary}</b>
+Kal dekhna: <b>${keyLevel}</b>
+Bias: <b>${formattedBias}</b>`.trim();
+
           await sendTelegramTextMessage(
             settings.telegramBotToken,
             settings.telegramChatId,
-            `📊 <b>Daily report ready</b> — check Reports tab for date ${dateString}`
+            richMessage
           );
         } catch (tgErr) {
           console.warn('[REPORTS API] Telegram dispatch failed:', tgErr);

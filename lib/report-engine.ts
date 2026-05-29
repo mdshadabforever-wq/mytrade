@@ -3,6 +3,7 @@ import { callClaude, isClaudeConfigured } from './claude-client';
 import fs from 'fs';
 import path from 'path';
 import { generateMockData } from './data-sources/mock-data';
+import { getSkillContent } from './skill';
 
 const prisma = new PrismaClient();
 const SETTINGS_FILE_PATH = path.join(process.cwd(), 'settings.json');
@@ -159,129 +160,239 @@ export async function compileMarketReport(type: 'DAILY' | 'WEEKLY' | 'MONTHLY', 
 
   if (isClaudeConfigured) {
     try {
-      const systemPrompt = `You are a high-level quantitative hedge fund partner specializing in structural market logic and capital metrics for Indian Indices. Always structure analysis sequentially.`;
+      const weekday = new Date(dateString).toLocaleDateString('en-IN', { weekday: 'long' });
+      const changePoints = Math.round((close - open) * 10) / 10;
+      const weeklyChange = changePercent; // Proxy
+      const fiiFODirection = marketData.institutional.fii.cash >= 0 ? 'LONG' : 'SHORT';
+      const retailFODirection = marketData.institutional.fii.cash >= 0 ? 'SHORT' : 'LONG';
+      const proFODirection = 'LONG';
       
-      const userPrompt = `Generate ULTRA DETAILED daily trading intelligence report for ${dateString}.
+      const sectorPerfList = marketData.sectors.map((s: any) => 
+        `- ${s.name}: ${s.changePercent}% — ${s.momentum} — Leader: ${s.leadingStock}`
+      ).join('\n');
+      
+      const topGainers = marketData.stocks.slice(0, 5).map(s => `${s.symbol} (+${s.changePercent}%)`).join(', ');
+      const topLosers = marketData.stocks.slice(-5).map(s => `${s.symbol} (${s.changePercent}%)`).join(', ');
 
-SESSION DATA:
-Nifty: O:${open} H:${high} L:${low} C:${close} 
-Change: ${changePercent}%
-Day Range: ${range} points
+      const systemPrompt = `SYSTEM: ${getSkillContent()}`;
+      
+      const userPrompt = `Aaj ke liye ek complete Indian stock market intelligence report banao — ${dateString} (${weekday}).
+
+Ye report teen kaam karegi:
+1. Mera personal trading review
+2. Blog post jo koi bhi padh sake
+3. YouTube video script
+
+Language: Hinglish — technical terms English mein, explanation Hindi mein. Conversational tone. NOT corporate. NOT boring. Like an expert friend explaining what happened today in the market.
+
+AAJ KA COMPLETE DATA:
+═══════════════════════════════
+
+NIFTY 50:
+Open: ${open} | High: ${high} | Low: ${low} | Close: ${close}
+Change: ${changePoints} pts (${changePercent}%)
+Day Range: ${range} pts
 Volume vs 20D avg: 115%
+Week so far: ${weeklyChange}%
 
-MARKET CONDITIONS:
-India VIX: ${rawReport.vixValue} (+1.2%) — NORMAL
-PCR: 1.05 — NEUTRAL
-Max Pain: 24000
-Session Quality: ${rawReport.marketRegime}
-GIFT Nifty Gap: 45 pts (UP)
+MARKET STRUCTURE:
+GIFT Nifty gap: ${marketData.giftNifty.gapPoints} pts (${marketData.giftNifty.direction})
+Opening behavior: ${marketData.giftNifty.direction === 'GAP_UP' ? 'GAP UP open, initial profit booking' : 'GAP DOWN open, initial short covering'}
+Intraday structure: ${marketData.regime.regime}
+Session quality: ${marketData.regime.confidence}% Confidence
 
-INSTITUTIONAL ACTIVITY:
-FII Cash: ₹${rawReport.fiiNetCash} Cr
-DII Cash: ₹${rawReport.diiNetCash} Cr
-FII F&O OI: 185000 (LONG)
-DII F&O OI: 92000
-Retail OI: 245000 (SHORT)
-PRO OI: 125000
+SMC SIGNALS TODAY:
+- BOS upside: confirmed
+- Bullish OB: active zone 24,050-24,067
+- Bullish FVG: 12 pts gap
+Key levels formed: 24000 support, 24150 ceiling
+
+DERIVATIVES:
+India VIX: ${marketData.vix.current} (${marketData.vix.changePercent}%) — ${marketData.vix.level}
+PCR: ${marketData.optionChain.pcr} | Max Pain: ${marketData.optionChain.maxPain}
+ATM IV: ${marketData.optionChain.atmIV}% | IV Percentile: ${marketData.optionChain.ivPercentile}%
+Expiry: ${marketData.optionChain.daysToExpiry} days
+
+INSTITUTIONAL:
+FII Cash: ${marketData.institutional.fii.cash} Cr (${marketData.institutional.fii.cash >= 0 ? 'BUYING' : 'SELLING'})
+DII Cash: ${marketData.institutional.dii.cash} Cr (${marketData.institutional.dii.cash >= 0 ? 'BUYING' : 'SELLING'})
+FII F&O OI: ${fiiFODirection}
+DII F&O OI: LONG
+Retail F&O OI: ${retailFODirection}
+PRO F&O OI: ${proFODirection}
 
 GLOBAL CUES:
 DOW: 0.15% | NASDAQ: 0.35% | NIKKEI: 0.45%
-Crude: 81.8 USD | USD/INR: 83.38
+GIFT Nifty: ${marketData.giftNifty.price} | Crude: $74.00 | USD/INR: 84.20
+SGX Nifty indication: ${marketData.giftNifty.direction === 'GAP_UP' ? 'BULLISH' : 'BEARISH'}
 
-SECTOR PERFORMANCE:
-${sectorsString}
+ALL 15 SECTORS TODAY:
+${sectorPerfList}
+
+TOP NIFTY 50 MOVERS:
+Top 5 gainers: ${topGainers}
+Top 5 losers: ${topLosers}
 
 ALERTS GENERATED TODAY: ${totalAlerts}
-${alertsDetailStr}
+${alertsDetailStr || 'No alerts generated today.'}
 
-NO TRADE PERIODS TODAY:
+NO-TRADE PERIODS:
 - 09:15 - 09:30: Session opening timing buffer
 - 15:15 - 15:30: Session closing timing buffer
+NEWS TODAY:
+- HDFC Bank launches corporate loan book expansion: BULLISH
+- NIFTY IT gains momentum as TCS leads major tech rotation: BULLISH
+- Automotive volumes slip in passenger vehicle segment: BEARISH
+- Adani Ports acquires new terminal on east coast: BULLISH
+- RBI Governor indicates steady interest rate profile: NEUTRAL
+ECONOMIC EVENTS: None today
 
-Generate this EXACT report structure:
+═══════════════════════════════
 
-═══════════════════════════════════════
-NEXUS ALPHA — DAILY INTELLIGENCE REPORT
-Date: ${dateString} | Compiled: ${new Date().toLocaleTimeString('en-US', { hour12: false })} IST
-═══════════════════════════════════════
+Ab ye EXACT format mein report likho:
 
-## 1. SESSION VERDICT
-[A-DAY / B-DAY / C-DAY / NO-TRADE-DAY]
-One paragraph — overall what kind of day was it,
-was it good for intraday, what dominated.
+---
 
-## 2. MARKET NARRATIVE
-3-4 lines — what actually happened in Nifty today,
-key levels touched, how it opened vs closed,
-was there a trend or choppy session.
+# ${dateString} — Aaj Ka Market Kya Bola?
+### {One punchy line about today — like a newspaper headline}
 
-## 3. INSTITUTIONAL INTELLIGENCE
-FII kya kar rahe the? DII ne kya kiya?
-F&O participants ne kaunsa side build kiya?
-Retail vs smart money — alignment ya divergence?
-What did this mean for today's bias?
+---
 
-## 4. GLOBAL & MACRO CONTEXT
-Global cues ka Nifty pe aaj kya asar pada?
-Crude, USD/INR movement ka analysis.
-Koi specific global event tha jo impactful raha?
+## 🎯 Aaj Ka Verdict — {A-DAY / B-DAY / C-DAY / NO-TRADE-DAY}
 
-## 5. SECTOR ANALYSIS
-Kaunse sectors ne lead kiya? Kaunse lagged?
-Sector rotation visible tha kya?
-Best performing sector aaj: {sector}
-Worst performing: {sector}
-Institutional sector preference visible?
+{2-3 lines mein: Aaj kaisa din tha? Trade karna chahiye tha ya nahi? Simple bhasha mein — jaise kisi dost ko bata rahe ho.}
 
-## 6. ALERTS DEEP DIVE
-Total alerts: ${totalAlerts} | Taken: ${takenAlerts.length} | Skipped: ${skippedAlerts.length}
+---
 
-${todayJournal.map((j: any, index: number) => `
-### Alert #${index + 1} — ${new Date(Number(j.alert_time)).toLocaleTimeString('en-US', { hour12: false })} IST — Grade ${j.grade}
-**Setup:** ${j.direction} setup at ${j.entry_zone}
-**Why it triggered:** L1: ${j.layer1_macro_reason}, L2: Net FII ${j.layer2_fii_flow} Cr, L3: PCR ${j.layer3_pcr}, L4: SMC Signals ${j.layer4_signals?.join(', ') || 'None'}
-**Confluence story:** How did all 5 layers align?
-**What happened after:** SL level ${j.stop_loss}, Target 1 ${j.target1}, Target 2 ${j.target2}
-**Trader decision:** ${j.trader_action} — Skip Reason: ${j.skip_reason || 'N/A'}
-**If mistake:** ${j.mistake_type || 'N/A'}
-**Learning:** One specific lesson from this alert.
-`).join('\n')}
+## 📖 Aaj Ki Kahani — Market Ne Kya Kiya
 
-## 7. NO-TRADE ANALYSIS
-Kab-kab NO-TRADE condition active rahi?
-Kyun? Kya ye sahi tha? 
-Agar trade liya hota toh kya hota?
+{Pure narrative style. Jaise ek episode ka story bata rahe ho. Subah se shaam tak ka flow. Key price levels mention karo.}
 
-## 8. PERFORMANCE METRICS
-Total Alerts: ${totalAlerts}
-Alerts Taken: ${takenAlerts.length} (${totalAlerts > 0 ? Math.round((takenAlerts.length / totalAlerts) * 100) : 0}%)
-Alerts Skipped: ${skippedAlerts.length}
-Winning Trades: ${winningTrades.length}
-Losing Trades: ${losingTrades.length}
-Breakeven: ${beTrades.length}
-Win Rate: ${winRate}%
-Total P&L: ${totalPnl} pts
-Average RR Achieved: ${averageRR}
-Best Trade: ${winningTrades[0] ? `Profit: ${winningTrades[0].pnl_points} pts on ${winningTrades[0].direction}` : 'N/A'}
-Worst Trade: ${losingTrades[0] ? `Loss: ${losingTrades[0].pnl_points} pts on ${losingTrades[0].direction}` : 'N/A'}
-Most Common Mistake Today: ${todayJournal.find((j: any) => j.mistake_type && j.mistake_type !== 'NONE')?.mistake_type || 'NONE'}
+Include:
+- Opening gap behavior
+- SSL/BSL sweeps kahan hue
+- Key levels kaise react kiye
+- Intraday high/low ka significance
+- Close position ka matlab
 
-## 9. TOMORROW KI PREPARATION
-Key levels to watch: 24000, 24150, 24200
-Overnight event risk: US Core PCE release
-GIFT Nifty expectation: Flat open based on index range
-Sector to watch: NIFTY IT, NIFTY BANK
-First trade window quality: Excellent
-VIX expectation: Stable around 14.5
-Overall tomorrow bias: BULLISH
-ONE specific thing to do differently tomorrow: Maintain strict discipline in unmitigated order blocks.
+---
 
-## 10. WEEKLY CONTEXT (Friday only)
-${new Date().getDay() === 5 ? `Weekly frame completed. Simulated Win Rate: ${winRate}% over the week. Consolidated institutional accumulation phase intact.` : 'N/A'}
+## 🏦 Smart Money Kya Kar Raha Tha
 
-═══════════════════════════════════════
-Report generated by NEXUS ALPHA Intelligence System`;
-      
+{Institutional flows ka analysis — conversational style. FII, DII, Participant OI — sab explain karo simple mein.}
+
+End with: "Overall smart money ka message kya tha aaj?"
+
+---
+
+## 🌍 Global Picture — Bahar Kya Ho Raha Tha
+
+{DOW, NASDAQ, Crude, USD/INR, GIFT Nifty ka context. Kaise connected tha aaj India se.}
+
+---
+
+## 📊 Sector Battlefield — Kaun Jita Kaun Hara
+
+🟢 WINNERS:
+• {Sector Name} +{changePercent}% — {why, key stock}
+
+🔴 LOSERS:
+• {Sector Name} -{changePercent}% — {why, key stock}
+
+🟡 MIXED:
+• {Sector Name} ±{changePercent}% — {why}
+
+Aaj ka sector rotation kya bol raha hai kal ke liye?
+
+---
+
+## ⚡ Nexus Alpha Alerts — Aaj Kya Mila
+
+{If 0 alerts: "Aaj system ne koi A/A+ setup nahi diya. Matlab ya toh market choppy tha ya conditions weak thein. Ye bhi ek information hai — kuch nahi karna bhi ek trade hai."}
+
+{If alerts, list each:}
+### Alert #{n} — {time} — Grade {grade} ({score}/100)
+**Setup:** {direction} | Entry: {entry} | SL: {sl} | T1: {t1}
+
+**Kyun triggered hua:**
+{Plain Hindi mein — 5 layers ka reason ek paragraph mein.}
+
+**Maine kya kiya:**
+{If TAKEN:
+"✅ Trade liya — Entry: {ep}
+Exit: {exp} at {exitTime}
+Result: {WIN/LOSS/BE} — {pnl} points ({rrAchieved} RR)"}
+
+{If SKIPPED:
+"⏭️ Skip kiya — {skipReason}
+Sahi decision tha ya galat: {honest assessment}"}
+
+{If PENDING:
+"⏳ Alert aaya lekin action nahi liya abhi"}
+
+---
+
+## 📈 Performance Tracker
+
+\`\`\`
+Aaj:
+  Alerts: ${totalAlerts} | Liye: ${takenAlerts.length} | Skip: ${skippedAlerts.length}
+  Result: ${winningTrades.length}W ${losingTrades.length}L ${beTrades.length}BE
+  P&L: ${totalPnl} pts
+  Best trade: ${winningTrades[0] ? winningTrades[0].pnl_points : 'N/A'}
+  Worst trade: ${losingTrades[0] ? losingTrades[0].pnl_points : 'N/A'}
+
+Is Hafte:
+  Total trades: ${takenAlerts.length}
+  Win rate: ${winRate}%
+  Net P&L: ${totalPnl} pts
+
+Is Mahine:
+  Expectancy: ${averageRR} pts/trade
+  Best setup: SSL sweep
+  Most common mistake: NONE
+\`\`\`
+
+---
+
+## ⚠️ System Ne Kya Seekha Aaj
+
+{Ek honest reflection — system ke nazariye se. Mistakes agar koi hue. Setup quality.}
+
+---
+
+## 🔮 Kal Ke Liye Taiyari
+
+**Key levels jo kal kaam aayenge:**
+• Resistance: ${close + 100}, ${close + 200}
+• Support: ${close - 100}, ${close - 200}
+• Max Pain magnet: ${marketData.optionChain.maxPain}
+• OB zones active: 23820-23840, 24050-24067
+
+**Kya dekhna hai kal subah:**
+• GIFT Nifty: Flat open expected
+• Global overnight: US Core PCE release watch
+• Event risk: No high impact events
+• VIX watch: VIX stable around ${marketData.vix.current}
+
+**Kal ke liye overall bias:** ${marketData.regime.bias}
+**Session quality expectation:** ${marketData.regime.regime}
+
+${new Date().getDay() === 5 ? `**Weekend ke liye note:** Geopolitical risks, global events watch, Monday gap risk.` : ''}
+
+---
+
+## 💡 Aaj Ka Sabak
+
+{Ek powerful learning — 2-3 lines. For blog readers + personal reminder.}
+
+---
+
+*Report generated by Nexus Alpha Intelligence System*
+*${dateString} ${new Date().toLocaleTimeString('en-US', { hour12: false, timeZone: 'Asia/Kolkata' })} IST | Data: NSE Live + Institutional feeds*
+*For educational and personal use only. Not investment advice.*
+`;
+
       reportMarkdown = await callClaude(userPrompt, systemPrompt, 'sonnet');
     } catch (err: any) {
       console.warn('[REPORT ENGINE] Claude API call failed, generating native template:', err.message);

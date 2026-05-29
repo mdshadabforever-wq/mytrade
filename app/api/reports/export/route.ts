@@ -1,12 +1,120 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getLocalReportByFilename } from '@/lib/report-engine';
 
+function convertToBlogHtml(markdown: string): string {
+  // Remove code blocks
+  let text = markdown.replace(/```[\s\S]*?```/g, '');
+
+  // Remove table rows
+  text = text.replace(/^\|.*\|$/gm, '');
+
+  // Remove horizontal rules and divider lines
+  text = text.replace(/^[-=_*#\u2550\u2500\u2502\u250c\u2510\u2514\u2518]{3,}$/gm, '');
+
+  const lines = text.split(/\r?\n/);
+  const processedLines: string[] = [];
+
+  lines.forEach(line => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+
+    // Convert headers to <h2>
+    if (trimmed.startsWith('#')) {
+      const headerText = trimmed.replace(/^#+\s*/, '').replace(/[*_`]/g, '');
+      processedLines.push(`<h2>${headerText}</h2>`);
+      return;
+    }
+
+    // Convert bold markdown to HTML bold tags
+    let formattedLine = trimmed.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+    formattedLine = formattedLine.replace(/_(.*?)_/g, '<i>$1</i>');
+    formattedLine = formattedLine.replace(/`(.*?)`/g, '<code>$1</code>');
+
+    // Convert bullet points to simple paragraphs with bullet
+    if (formattedLine.startsWith('•') || formattedLine.startsWith('-') || formattedLine.startsWith('*')) {
+      const itemText = formattedLine.replace(/^[•\-*]\s*/, '');
+      processedLines.push(`<p>• ${itemText}</p>`);
+      return;
+    }
+
+    // Wrap normal paragraphs in <p>
+    processedLines.push(`<p>${formattedLine}</p>`);
+  });
+
+  return processedLines.join('\n');
+}
+
+function convertToYoutubeScript(markdown: string): string {
+  // Remove code blocks
+  let text = markdown.replace(/```[\s\S]*?```/g, '');
+
+  // Remove table rows
+  text = text.replace(/^\|.*\|$/gm, '');
+
+  // Remove horizontal rules and divider lines
+  text = text.replace(/^[-=_*#\u2550\u2500\u2502\u250c\u2510\u2514\u2518]{3,}$/gm, '');
+
+  const lines = text.split(/\r?\n/);
+  const processedLines: string[] = [];
+
+  // YouTube spoken opener
+  processedLines.push("Namaste doston, [PAUSE] market ke ek aur informative segment mein aapka swagat hai. [PAUSE] [SHOW CHART]");
+
+  lines.forEach(line => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+
+    // Convert section headers to narrative speech transitions
+    if (trimmed.startsWith('#')) {
+      const headerText = trimmed.replace(/^#+\s*/, '').replace(/[*_`]/g, '');
+      
+      if (headerText.includes('Verdict') || headerText.includes('VERDICT')) {
+        processedLines.push("\n[PAUSE] [EMPHASIZE] Chaliye sabse pehle aaj ke verdict ki baat karte hain.");
+      } else if (headerText.includes('Kahani') || headerText.includes('NARRATIVE') || headerText.includes('Kya Kiya')) {
+        processedLines.push("\n[PAUSE] [SHOW CHART] Ab aate hain aaj ki kahani par, ki subah se shaam tak market mein kya-kya hua.");
+      } else if (headerText.includes('Smart Money') || headerText.includes('INSTITUTIONAL')) {
+        processedLines.push("\n[PAUSE] [EMPHASIZE] Aaj smart money kya kar raha tha? FII aur DII data ko decode karte hain.");
+      } else if (headerText.includes('Global Picture') || headerText.includes('GLOBAL')) {
+        processedLines.push("\n[PAUSE] [SHOW CHART] Bahar global markets mein kya chal raha hai aur iska India par kya impact hai?");
+      } else if (headerText.includes('Sector Battlefield') || headerText.includes('SECTOR')) {
+        processedLines.push("\n[PAUSE] [SHOW CHART] Chaliye sector rotation aur sectors ki ladai ko dekhte hain.");
+      } else if (headerText.includes('Alerts') || headerText.includes('ALERTS')) {
+        processedLines.push("\n[PAUSE] [SHOW CHART] Nexus Alpha alert system ne aaj kaun se setups trigger kiye?");
+      } else if (headerText.includes('Kal Ke Liye') || headerText.includes('PREPARATION')) {
+        processedLines.push("\n[PAUSE] [EMPHASIZE] Ab sabse important baat - kal ke liye hamari kya taiyari honi chahiye? Levels kya hain?");
+      } else if (headerText.includes('Aaj Ka Sabak')) {
+        processedLines.push("\n[PAUSE] [EMPHASIZE] Aur aakhir mein, aaj ka sabak jo aapko long term mein trading discipline seekhayega.");
+      } else {
+        processedLines.push(`\n[PAUSE] [EMPHASIZE] ${headerText}`);
+      }
+      return;
+    }
+
+    // Clean remaining markdown formatting characters
+    let cleanedLine = trimmed
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/_(.*?)_/g, '$1')
+      .replace(/`(.*?)`/g, '$1')
+      .replace(/^[•\-*]\s*/, '') // remove bullet list dots
+      .replace(/^[🟢🔴🟡⏳✅⏭️🚨⚠️🎯📖🏦🌍📊⚡📈🔮💡]\s*/g, ''); // strip emojis
+
+    if (cleanedLine) {
+      processedLines.push(cleanedLine);
+    }
+  });
+
+  // YouTube subscription CTA at the end
+  processedLines.push("\n[PAUSE] [EMPHASIZE] Agar aapko ye intelligence review accha laga, toh video ko like karein, share karein aur channel ko subscribe zaroor karein! Kal milte hain. [PAUSE]");
+
+  return processedLines.join('\n');
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type') as 'DAILY' | 'WEEKLY' | 'MONTHLY' | null;
     const filename = searchParams.get('filename');
-    const format = searchParams.get('format') as 'pdf' | 'markdown' | 'csv' | 'json' | null;
+    const format = searchParams.get('format') as 'pdf' | 'markdown' | 'csv' | 'json' | 'blog' | 'youtube' | null;
 
     if (!type || !filename || !format) {
       return NextResponse.json({ success: false, message: 'Type, filename, and format query parameters are required' }, { status: 400 });
@@ -274,6 +382,26 @@ export async function GET(request: NextRequest) {
         return new NextResponse(printHtml, {
           headers: {
             'Content-Type': 'text/html'
+          }
+        });
+      }
+
+      case 'blog': {
+        const blogHtml = convertToBlogHtml(markdown);
+        return new NextResponse(blogHtml, {
+          headers: {
+            'Content-Type': 'text/html',
+            'Content-Disposition': `attachment; filename="${filename.replace('.json', '_blog.html')}"`
+          }
+        });
+      }
+
+      case 'youtube': {
+        const youtubeScript = convertToYoutubeScript(markdown);
+        return new NextResponse(youtubeScript, {
+          headers: {
+            'Content-Type': 'text/plain',
+            'Content-Disposition': `attachment; filename="${filename.replace('.json', '_youtube.txt')}"`
           }
         });
       }
