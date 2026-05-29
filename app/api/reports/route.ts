@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getLocalReportsList, compileMarketReport, getLocalReportByFilename } from '@/lib/report-engine';
 import { sendTelegramTextMessage } from '@/lib/telegram-notifier';
+
+export const dynamic = 'force-dynamic';
 import fs from 'fs';
 import path from 'path';
 

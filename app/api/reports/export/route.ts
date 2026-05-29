@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getLocalReportByFilename } from '@/lib/report-engine';
 
+export const dynamic = 'force-dynamic';
+
 function convertToBlogHtml(markdown: string): string {
   // Remove code blocks
   let text = markdown.replace(/```[\s\S]*?```/g, '');
