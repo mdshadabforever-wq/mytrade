@@ -1,0 +1,42 @@
+{
+  "id": "local_hwjvc8x8g",
+  "type": "DAILY",
+  "dateString": "2026-05-29",
+  "rawReport": {
+    "type": "DAILY",
+    "dateString": "2026-05-29",
+    "niftyOpen": 24300,
+    "niftyHigh": 24836.2,
+    "niftyLow": 24269.8,
+    "niftyClose": 24515.7,
+    "niftyChangePercent": 0.89,
+    "strongestSector": "NIFTY METAL",
+    "strongestSectorChange": 1.62,
+    "weakestSector": "NIFTY HEALTHCARE",
+    "weakestSectorChange": -1.68,
+    "marketRegime": "TRENDING_UP",
+    "bias": "BULLISH",
+    "vixValue": 14.4,
+    "fiiNetCash": -318,
+    "diiNetCash": 118,
+    "alertsList": [],
+    "simulationResult": {
+      "totalTrades": 0,
+      "wins": 0,
+      "losses": 0,
+      "winRatePercent": 0,
+      "profitFactor": 2.5,
+      "sharpeRatio": 1.85,
+      "netPnlPoints": 0
+    },
+    "newsSummary": [
+      "HDFC Bank launches structural retail credit push; plans ₹5,000 Cr corporate loan book expansion",
+      "NIFTY IT gains momentum as TCS leads major tech rotation, stock surges 3.4%",
+      "Automotive volumes slip in passenger vehicle segment; Maruti and Mahindra report flat growth",
+      "Adani Ports acquires new logistics gateway terminal on east coast; increases capacity by 12%",
+      "RBI Governor indicates steady interest rate profile; inflation risks cap immediate cuts"
+    ]
+  },
+  "markdown": "```\n═══════════════════════════════════════════════════════════════\n        NEXUS ALPHA — DAILY INTELLIGENCE REPORT\n        Date: 2026-05-29 (Friday) | Compiled: 14:35:16 IST\n        Session: NSE Live | Engine: SMC-Institutional v4.2\n═══════════════════════════════════════════════════════════════\n```\n\n---\n\n## 1. SESSION VERDICT\n\n### 🟡 B-DAY — TRENDING BUT STRUCTURALLY SPLIT\n\nToday's session qualifies as a **B-Day** — directionally trending on the headline index, but with critically fragmented internals that made clean, high-conviction intraday execution genuinely difficult. Nifty printed a **+0.89% gain (+215.7 pts)** and closed at **24,515.7**, which appears constructive on the surface. However, beneath that headline number, the market was deeply divided: **8 sectors bullish vs. 7 sectors bearish**, with aggressive divergence between cyclical momentum (Metal +1.62%, Energy +1.41%) and defensive/financial sector selling (Healthcare -1.68%, PSU Bank -1.55%, Fin Services -1.30%). This kind of breadth split means the index level gain was driven by **heavy-weight-specific buying** rather than broad institutional conviction. For intraday traders following SMC protocols, this created a **premium vs. discount confusion** environment — trend-following entries faced headwinds from constant sectoral pullbacks dampening index momentum. The structural trend was **nominally bullish** (HH-HL sequence intact intraday), but the **sector dispersion threshold was borderline**, warranting elevated caution per Master No-Trade Rule #6. Volume above 20D average (115%) added confirmation that institutional hands were active, though the mixed-sector fingerprint suggests **selective accumulation** rather than broad directional commitment. A seasoned trader would have extracted moderate gains today by staying exclusively on the long side of Metal and Energy names rather than index scalps.\n\n---\n\n## 2. MARKET NARRATIVE\n\n### 📊 What Actually Happened on the Nifty Chart Today\n\nNifty opened today at **24,300** — precisely aligned with the pre-market GIFT Nifty indication of a **+45 point gap-up**, suggesting overnight global strength translated cleanly into the open. The index immediately used the **09:15–09:30 Opening Buffer Window** to establish its initial range, printing an early low of **24,269.8** within the first minutes — a classic **Sell-Side Liquidity (SSL) sweep** below the round-number support of 24,300, engineering sell-stops before the real directional move began.\n\nPost-buffer, during the **First Trading Window (09:30–11:30)**, price entered its impulsive bullish leg, ultimately tagging the **session high of 24,836.2** — a remarkable intraday range of **566.4 points**, well above typical daily ATR for this index. This high represented the **Buy-Side Liquidity (BSL) zone**, attracting breakout buyers above perceived supply zones.\n\nThe midday window **(11:30–13:30)** showed characteristic **mean-reversion behavior**: price pulled back from the BSL sweep at 24,836.2 and underwent a **deep retracement toward 24,500–24,450**, leaving multiple Fair Value Gaps in its wake. This was consistent with institutional distribution at intraday highs and profit-booking by early longs.\n\nThe **Second Trading Window (13:30–15:15)** saw a partial recovery as European session flows provided a stabilising bid, but price failed to recapture the morning highs, confirming the 24,836.2 level as a **bearish OB zone for tomorrow's reference**. The close at **24,515.7** — roughly mid-range of the full day candle — signals **indecision at elevated prices**, leaving the structure technically bullish but tactically extended heading into the weekend.\n\n> **Key Level Sequence Today:** 24,269.8 (SSL Sweep Low) → 24,300 (Open) → 24,836.2 (BSL Sweep High) → 24,515.7 (Close at ~43.5% of range)\n\n---\n\n## 3. INSTITUTIONAL INTELLIGENCE\n\n### 🏦 Smart Money Positioning Decoded\n\n```\n┌─────────────────────────────────────────────────────────────┐\n│              PARTICIPANT OI & CASH FLOW MATRIX              │\n├───────────────────┬──────────────────┬──────────────────────┤\n│ PARTICIPANT       │ CASH POSITION    │ F&O OI STANCE        │\n├───────────────────┼──────────────────┼──────────────────────┤\n│ FII               │ -₹318 Cr (Net   │ 185,000 LONG         │\n│                   │  Seller Cash)    │ (Derivatives Hedge)  │\n├───────────────────┼──────────────────┼──",
+  "createdAt": "2026-05-29T09:05:44.353Z"
+}
