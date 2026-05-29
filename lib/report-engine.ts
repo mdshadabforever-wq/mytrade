@@ -25,8 +25,10 @@ function getSavedSettings() {
   }
 }
 
-// Ensure reports directory exists
-const REPORTS_DIR = path.join(process.cwd(), 'reports');
+const isVercel = !!process.env.VERCEL;
+const REPORTS_DIR = isVercel 
+  ? path.join('/tmp', 'reports') 
+  : path.join(process.cwd(), 'reports');
 const DAILY_DIR = path.join(REPORTS_DIR, 'daily');
 const WEEKLY_DIR = path.join(REPORTS_DIR, 'weekly');
 const MONTHLY_DIR = path.join(REPORTS_DIR, 'monthly');

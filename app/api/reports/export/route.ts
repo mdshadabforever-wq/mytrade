@@ -11,7 +11,10 @@ function getJwtSecret(): Uint8Array {
 }
 
 function getLocalReportByFilename(type: 'DAILY' | 'WEEKLY' | 'MONTHLY', filename: string) {
-  const reportsDir = path.join(process.cwd(), 'reports');
+  const isVercel = !!process.env.VERCEL;
+  const reportsDir = isVercel 
+    ? path.join('/tmp', 'reports') 
+    : path.join(process.cwd(), 'reports');
   const targetDir = path.join(reportsDir, type.toLowerCase());
   const filePath = path.join(targetDir, filename);
   if (!fs.existsSync(filePath)) return null;
