@@ -39,6 +39,11 @@ function isRateLimited(ip: string, pathname: string): boolean {
 }
 
 export async function middleware(request: NextRequest) {
+  // Bypass JWT authentication during the production build compile phase to prevent static pre-rendering 401 exceptions
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    return NextResponse.next();
+  }
+
   const { pathname } = request.nextUrl;
 
   // Always allow static assets
