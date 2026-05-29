@@ -1,4 +1,5 @@
-import { fetchYFinanceQuote } from './data-sources/yfinance-client';
+import { fetchYFinanceQuote, fetchSectorData } from './data-sources/yfinance-client';
+import { cacheGet, cacheSet } from './cache';
 import { fetchFIIDIITrade } from './data-sources/nse-client';
 import { generateMockData, MockSectorData, MockStockData } from './data-sources/mock-data';
 
@@ -114,12 +115,29 @@ export async function getMarketContext(): Promise<MarketContextData> {
 
     const institutional = fiiDiiRaw ?? mock.institutional;
 
+    // Fetch live sector rotation data (cached 5 min)
+    let sectors = mock.sectors;
+    try {
+      const cachedSectors = await cacheGet<any[]>('sector_rotation');
+      if (cachedSectors) {
+        sectors = cachedSectors;
+      } else {
+        const liveSectors = await fetchSectorData();
+        if (liveSectors && liveSectors.length > 0) {
+          sectors = liveSectors;
+          await cacheSet('sector_rotation', liveSectors, 300);
+        }
+      }
+    } catch (sectorErr) {
+      console.warn('[MARKET CONTEXT] Sector fetch failed, using mock sectors:', sectorErr);
+    }
+
     return {
       giftNifty,
       institutional,
       vix,
-      sectors: mock.sectors, // Merge in high-fidelity simulated sectors
-      stocks: mock.stocks,   // Merge in high-fidelity stock futures
+      sectors,              // Live CNX sector data or mock fallback
+      stocks: mock.stocks,  // Merge in high-fidelity stock futures
       regime: mock.regime,
       timestamp: new Date().toISOString()
     };

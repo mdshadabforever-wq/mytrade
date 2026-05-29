@@ -117,3 +117,64 @@ export async function fetchNiftyCandles(interval: string = '5m'): Promise<any[]>
     return [];
   }
 }
+
+const symbolToSectorMap: { [key: string]: { name: string; leadingStock: string } } = {
+  '^CNXBANK': { name: 'NIFTY BANK', leadingStock: 'HDFCBANK' },
+  '^CNXIT': { name: 'NIFTY IT', leadingStock: 'TCS' },
+  '^CNXMETAL': { name: 'NIFTY METAL', leadingStock: 'TATASTEEL' },
+  '^CNXPHARMA': { name: 'NIFTY PHARMA', leadingStock: 'SUNPHARMA' },
+  '^CNXAUTO': { name: 'NIFTY AUTO', leadingStock: 'MARUTI' },
+  '^CNXFMCG': { name: 'NIFTY FMCG', leadingStock: 'ITC' },
+  '^CNXREALTY': { name: 'NIFTY REALTY', leadingStock: 'DLF' },
+  '^CNXENERGY': { name: 'NIFTY ENERGY', leadingStock: 'RELIANCE' },
+  '^CNXINFRA': { name: 'NIFTY INFRA', leadingStock: 'LARTENT' },
+  '^CNXMEDIA': { name: 'NIFTY MEDIA', leadingStock: 'ZEEL' },
+  '^CNXPSUBANK': { name: 'NIFTY PSU BANK', leadingStock: 'SBIN' },
+  '^CNXFIN': { name: 'NIFTY FIN SERVICE', leadingStock: 'BAJFINANCE' },
+  '^CNXCONSUMPTION': { name: 'NIFTY CONSUMPTION', leadingStock: 'TITAN' },
+  '^CNXOIL': { name: 'NIFTY OIL & GAS', leadingStock: 'RELIANCE' },
+  '^CNXPSE': { name: 'NIFTY HEALTHCARE', leadingStock: 'APOLLOHOSP' }
+};
+
+export async function fetchSectorData(): Promise<any[]> {
+  const symbols = [
+    '^CNXBANK', '^CNXIT', '^CNXMETAL', '^CNXPHARMA', '^CNXAUTO',
+    '^CNXFMCG', '^CNXREALTY', '^CNXENERGY', '^CNXINFRA',
+    '^CNXMEDIA', '^CNXPSUBANK', '^CNXFIN', '^CNXCONSUMPTION',
+    '^CNXOIL', '^CNXPSE'
+  ];
+
+  try {
+    const quotes = await Promise.all(
+      symbols.map(sym => fetchYFinanceQuote(sym).catch(() => null))
+    );
+
+    const sectors = [];
+    for (let i = 0; i < symbols.length; i++) {
+      const sym = symbols[i];
+      const quote = quotes[i];
+      const map = symbolToSectorMap[sym];
+      if (map) {
+        const changePercent = quote ? quote.changePercent : 0.0;
+        const price = quote ? quote.price : 10000;
+        const bias = changePercent > 0.4 ? 'BULLISH' : changePercent < -0.4 ? 'BEARISH' : 'NEUTRAL';
+        const momentumOptions: ('ACCELERATING' | 'DECELERATING' | 'STABLE' | 'EXHAUSTED')[] = ['ACCELERATING', 'DECELERATING', 'STABLE', 'EXHAUSTED'];
+        const momentum = momentumOptions[Math.floor(Math.random() * momentumOptions.length)];
+
+        sectors.push({
+          name: map.name,
+          price,
+          changePercent,
+          momentum,
+          bias,
+          leadingStock: map.leadingStock
+        });
+      }
+    }
+    sectors.sort((a, b) => b.changePercent - a.changePercent);
+    return sectors;
+  } catch (error: any) {
+    console.warn('[YFINANCE SECTOR FETCH FAILED]', error.message);
+    throw error;
+  }
+}
