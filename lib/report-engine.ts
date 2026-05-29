@@ -5,7 +5,15 @@ import path from 'path';
 import { generateMockData } from './data-sources/mock-data';
 import { getSkillContent } from './skill';
 
-const prisma = new PrismaClient();
+// Lazy-load Prisma Client to prevent connection errors during Vercel build phase (Page Collection)
+let prismaInstance: PrismaClient | null = null;
+function getPrisma() {
+  if (!prismaInstance) {
+    prismaInstance = new PrismaClient();
+  }
+  return prismaInstance;
+}
+
 const SETTINGS_FILE_PATH = path.join(process.cwd(), 'settings.json');
 
 function getSavedSettings() {
@@ -492,7 +500,7 @@ A macro audit of all setups over the trailing monthly frame shows:
         created_at: new Date().toISOString()
       });
     } else if (process.env.DATABASE_URL) {
-      const record = await prisma.marketReport.create({
+      const record = await getPrisma().marketReport.create({
         data: {
           type,
           dateString,
