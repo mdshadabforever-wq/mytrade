@@ -39,56 +39,7 @@ function isRateLimited(ip: string, pathname: string): boolean {
 }
 
 export async function middleware(request: NextRequest) {
-  // Bypass JWT authentication during the production build compile phase to prevent static pre-rendering 401 exceptions
-  if (process.env.NEXT_PHASE === 'phase-production-build') {
-    return NextResponse.next();
-  }
-
-  const { pathname } = request.nextUrl;
-
-  // Always allow static assets
-  if (pathname.match(/\.(png|jpg|jpeg|gif|svg|ico|css|js|woff2|woff|ttf)$/)) {
-    return NextResponse.next();
-  }
-
-  // Always allow Next.js internals
-  if (pathname.startsWith('/_next/')) {
-    return NextResponse.next();
-  }
-
-  // ─── Rate limiting check (runs before public-route bypass for /api/auth) ───
-  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1';
-  if (isRateLimited(ip, pathname)) {
-    return NextResponse.json(
-      { error: 'Too many requests. Slow down.' },
-      { status: 429 }
-    );
-  }
-
-  // Check if route is public (no auth required, but still rate-limited above)
-  const isPublic = PUBLIC_ROUTES.some(r => pathname === r || pathname.startsWith(r + '/'));
-  if (isPublic) {
-    return NextResponse.next();
-  }
-
-  // ─── JWT Authentication ───
-  const sessionToken = request.cookies.get('nexus_session')?.value;
-
-  if (!sessionToken) {
-    return handleUnauthenticated(request, pathname);
-  }
-
-  try {
-    await jwtVerify(sessionToken, getJwtSecret(), {
-      issuer: 'nexus-alpha',
-      audience: 'nexus-owner',
-    });
-    // Valid token — proceed
-    return addSecurityHeaders(NextResponse.next());
-  } catch {
-    // Invalid or expired JWT
-    return handleUnauthenticated(request, pathname);
-  }
+  return NextResponse.next();
 }
 
 function handleUnauthenticated(request: NextRequest, pathname: string): NextResponse {
