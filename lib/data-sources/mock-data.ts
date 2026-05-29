@@ -152,7 +152,7 @@ export function generateMockData(intervalMinutes: number = 5): MockDataResult {
   // 1. Generate Candles: Random walk around 24000
   const candleCount = 100;
   const candles: Candle[] = [];
-  let basePrice = 24050;
+  let basePrice = 24300;
   let t = now.getTime() - candleCount * intervalMinutes * 60 * 1000;
 
   for (let i = 0; i < candleCount; i++) {

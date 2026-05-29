@@ -22,6 +22,7 @@ export interface MarketContextData {
     trend: 'RISING' | 'FALLING' | 'FLAT';
     interpretation: string;
     level: 'LOW' | 'NORMAL' | 'HIGH' | 'EXTREME';
+    isLive?: boolean;
   };
   sectors: MockSectorData[];
   stocks: MockStockData[];
@@ -51,7 +52,8 @@ export async function getMarketContext(): Promise<MarketContextData> {
         changePercent: mock.vix.changePercent,
         trend: mock.vix.trend,
         interpretation: mock.vix.interpretation,
-        level: mock.vix.level
+        level: mock.vix.level,
+        isLive: false
       },
       sectors: mock.sectors,
       stocks: mock.stocks,
@@ -75,7 +77,7 @@ export async function getMarketContext(): Promise<MarketContextData> {
     // Format GIFT Nifty
     let giftNifty = mock.giftNifty;
     if (giftRaw) {
-      const niftyQuote = await fetchYFinanceQuote('^NSEI').catch(() => ({ price: 24000 }));
+      const niftyQuote = (await fetchYFinanceQuote('^NSEI').catch(() => null)) || { price: 24000 };
       const gapPoints = giftRaw.price - niftyQuote.price;
       const gapPercent = (gapPoints / niftyQuote.price) * 100;
       giftNifty = {
@@ -94,7 +96,8 @@ export async function getMarketContext(): Promise<MarketContextData> {
       changePercent: mock.vix.changePercent,
       trend: mock.vix.trend,
       interpretation: mock.vix.interpretation,
-      level: mock.vix.level
+      level: mock.vix.level,
+      isLive: false
     };
 
     if (vixRaw) {
@@ -109,7 +112,8 @@ export async function getMarketContext(): Promise<MarketContextData> {
         changePercent: vixRaw.changePercent,
         trend: vixRaw.change > 0.15 ? 'RISING' : vixRaw.change < -0.15 ? 'FALLING' : 'FLAT',
         interpretation: vixRaw.price < 13 ? 'Low volatility — stable conditions' : 'Normal volatility — balanced trade structures',
-        level
+        level,
+        isLive: true
       };
     }
 
@@ -152,7 +156,8 @@ export async function getMarketContext(): Promise<MarketContextData> {
         changePercent: mock.vix.changePercent,
         trend: mock.vix.trend,
         interpretation: mock.vix.interpretation,
-        level: mock.vix.level
+        level: mock.vix.level,
+        isLive: false
       },
       sectors: mock.sectors,
       stocks: mock.stocks,

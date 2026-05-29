@@ -10,20 +10,24 @@ export interface YFinanceQuote {
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
-export async function fetchYFinanceQuote(symbol: string): Promise<YFinanceQuote> {
-  try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
-    const response = await axios.get(url, {
-      headers: {
-        'User-Agent': USER_AGENT,
-        'Accept': 'application/json'
-      },
-      timeout: 5000
-    });
+export async function fetchYFinanceQuote(symbol: string): Promise<YFinanceQuote | null> {
+  const query1Url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
+  const query2Url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
+  
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'Accept': 'application/json',
+    'Accept-Language': 'en-US,en;q=0.9'
+  };
 
-    const result = response.data?.chart?.result?.[0];
+  const makeCall = async (url: string) => {
+    return await axios.get(url, { headers, timeout: 5000 });
+  };
+
+  const parseResponse = (data: any): YFinanceQuote => {
+    const result = data?.chart?.result?.[0];
     if (!result) {
-      throw new Error(`Invalid Yahoo Finance response for symbol: ${symbol}`);
+      throw new Error(`Invalid Yahoo Finance response structure for symbol: ${symbol}`);
     }
 
     const meta = result.meta;
@@ -32,7 +36,6 @@ export async function fetchYFinanceQuote(symbol: string): Promise<YFinanceQuote>
     const change = price - prevClose;
     const changePercent = (change / prevClose) * 100;
 
-    // Extract close history if available
     const quotes = result.indicators?.quote?.[0]?.close ?? [];
     const history = quotes.filter((v: any) => v !== null && v !== undefined) as number[];
 
@@ -43,33 +46,30 @@ export async function fetchYFinanceQuote(symbol: string): Promise<YFinanceQuote>
       changePercent: Math.round(changePercent * 100) / 100,
       history: history.slice(-5)
     };
-  } catch (error: any) {
-    console.warn(`[YFINANCE] Failed to fetch quote for ${symbol}:`, error.message);
-    
-    // Provide a sensible fallback based on symbol type
-    let fallbackPrice = 100;
-    let fallbackChange = 0.5;
-    
-    if (symbol === '^DJI') { fallbackPrice = 39850; fallbackChange = 0.15; }
-    else if (symbol === '^GSPC') { fallbackPrice = 5320; fallbackChange = 0.22; }
-    else if (symbol === '^IXIC') { fallbackPrice = 18650; fallbackChange = 0.35; }
-    else if (symbol === '^N225') { fallbackPrice = 38700; fallbackChange = 0.45; }
-    else if (symbol === '^HSI') { fallbackPrice = 18150; fallbackChange = -0.12; }
-    else if (symbol === 'BZ=F') { fallbackPrice = 82.5; fallbackChange = -0.4; }
-    else if (symbol === 'GC=F') { fallbackPrice = 2345.5; fallbackChange = 0.12; }
-    else if (symbol === 'INR=X') { fallbackPrice = 83.4; fallbackChange = -0.05; }
-    else if (symbol === '^TNX') { fallbackPrice = 4.42; fallbackChange = 0.01; }
-    else if (symbol === '^INDIAVIX') { fallbackPrice = 14.2; fallbackChange = 1.2; }
-    else if (symbol === 'NIFTY-I.NS') { fallbackPrice = 24050; fallbackChange = 0.10; }
-    else if (symbol === '^NSEI') { fallbackPrice = 24000; fallbackChange = 0.25; }
+  };
 
-    return {
-      price: fallbackPrice,
-      prevClose: fallbackPrice / (1 + fallbackChange / 100),
-      change: fallbackPrice * (fallbackChange / 100),
-      changePercent: fallbackChange,
-      history: [fallbackPrice * 0.98, fallbackPrice * 0.99, fallbackPrice]
-    };
+  // Try query1
+  try {
+    const response = await makeCall(query1Url);
+    const quote = parseResponse(response.data);
+    console.log(`[YFINANCE] ${symbol} fetched: ${quote.price} ✅ LIVE (query1)`);
+    return quote;
+  } catch (error1: any) {
+    console.error(`[YFINANCE] query1 failed for ${symbol}:`, error1.message || error1);
+    
+    // Add small delay (200ms) before query2
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    // Try query2
+    try {
+      const response = await makeCall(query2Url);
+      const quote = parseResponse(response.data);
+      console.log(`[YFINANCE] ${symbol} fetched: ${quote.price} ✅ LIVE (query2)`);
+      return quote;
+    } catch (error2: any) {
+      console.error(`[YFINANCE] BOTH query1 & query2 failed for ${symbol}:`, error2.message || error2);
+      return null;
+    }
   }
 }
 

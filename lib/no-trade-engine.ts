@@ -19,6 +19,8 @@ export function detectNoTradeCondition(data: {
   isHighImpactEventToday?: boolean;
   isHolidayTomorrow?: boolean;
   volumePercentOfAverage?: number; // E.g., 50 for 50%
+  globalIndicesLive?: boolean;
+  vixLive?: boolean;
 }): NoTradeResult {
   const reasons: string[] = [];
   let isNoTradeDay = false;
@@ -87,6 +89,11 @@ export function detectNoTradeCondition(data: {
   const isDivergent = data.sectorDispersion.strongestChange > 0 && data.sectorDispersion.weakestChange < 0;
   if (isDivergent && sectorSpread < 1.0) {
     reasons.push('CAUTION: Mixed sector rotation indicates lack of clear institutional participation.');
+  }
+
+  // D. Global Feeds Down Soft Block
+  if (data.globalIndicesLive === false && data.vixLive === false) {
+    reasons.push('SOFT BLOCK: Market data feeds down');
   }
 
   // Resolve confidence level

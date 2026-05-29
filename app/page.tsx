@@ -550,6 +550,9 @@ export default function NexusAlphaTerminal() {
       const session = getCurrentSession(istNow);
       const timeMinutes = (istNow.getHours() - 9) * 60 + istNow.getMinutes() - 15;
 
+      const isGlobalLiveData = !!(globalCues && Object.values(globalCues).some((v: any) => v && (v.status === 'LIVE' || v.status === 'DELAYED')));
+      const isVixLive = vixData?.isLive !== false;
+
       const alignedIndicesCount = [
         regimeData?.bias === 'BULLISH',
         sectorsData?.some((s: any) => s.bias === 'BULLISH'),
@@ -561,7 +564,8 @@ export default function NexusAlphaTerminal() {
           giftNiftyDirection: giftNifty?.direction || 'FLAT',
           giftNiftyGap: giftNifty?.gap || giftNifty?.gapPoints || 0,
           alignedIndicesCount,
-          globalBias: regimeData?.bias || 'MIXED'
+          globalBias: regimeData?.bias || 'MIXED',
+          isLiveData: isGlobalLiveData
         },
         institutional: {
           fiiCash: institutional?.fii?.cash || 0,
@@ -578,7 +582,8 @@ export default function NexusAlphaTerminal() {
           pcr: optionChainData?.pcr || 1.0,
           vix: vixData?.current || 14.5,
           isPriceAboveMaxPain: latestPrice > (optionChainData?.maxPain || 24000),
-          isObSupporting: smcResult.orderBlocks.some(ob => !ob.isMitigated && ob.type === 'BULLISH')
+          isObSupporting: smcResult.orderBlocks.some(ob => !ob.isMitigated && ob.type === 'BULLISH'),
+          vixLive: isVixLive
         },
         structure: {
           hasChoch: smcResult.signals.some((s: any) => s.type === 'CHOCH'),
@@ -925,6 +930,9 @@ export default function NexusAlphaTerminal() {
   const indexClosePrice = visibleCandles[visibleCandles.length - 1]?.close ?? 24050;
   const indexOpenPrice = visibleCandles[0]?.open ?? 24000;
 
+  const isGlobalLiveData = !!(globalCues && Object.values(globalCues).some((v: any) => v && (v.status === 'LIVE' || v.status === 'DELAYED')));
+  const isVixLive = vixData?.isLive !== false;
+
   return (
     <div className="min-h-screen bg-[#050508] text-[#e6e6e6] flex flex-col font-sans pb-16">
       {/* Toast Notification Overlay */}
@@ -945,17 +953,17 @@ export default function NexusAlphaTerminal() {
         data={loading && isInitialFetch.current ? null : { 
           marketContext: {
             globalCues: globalCues || {
-              dow: { price: 39850, changePercent: 0.15 },
-              sp500: { price: 5320, changePercent: 0.22 },
-              nasdaq: { price: 18650, changePercent: 0.35 },
-              nikkei: { price: 38700, changePercent: 0.45 },
-              hangseng: { price: 18150, changePercent: -0.12 }
+              dow: { price: 50000, changePercent: 0.15, status: 'MOCK' },
+              sp500: { price: 5320, changePercent: 0.22, status: 'MOCK' },
+              nasdaq: { price: 17800, changePercent: 0.35, status: 'MOCK' },
+              nikkei: { price: 37500, changePercent: 0.45, status: 'MOCK' },
+              hangseng: { price: 18150, changePercent: -0.12, status: 'MOCK' }
             },
             commodities: commodities || {
-              crude: { price: 81.8, changePercent: -0.4 },
-              gold: { price: 2345.5, changePercent: 0.12 },
-              usdinr: { price: 83.38, change: 0.04 },
-              us10y: { yield: 4.42, change: 0.01 }
+              crude: { price: 74.00, changePercent: -0.4, status: 'MOCK' },
+              gold: { price: 2345.5, changePercent: 0.12, status: 'MOCK' },
+              usdinr: { price: 84.20, change: 0.04, status: 'MOCK' },
+              us10y: { yield: 4.42, change: 0.01, status: 'MOCK' }
             },
             giftNifty,
             institutional
@@ -968,6 +976,13 @@ export default function NexusAlphaTerminal() {
           vix: vixData 
         }} 
       />
+
+      {/* Warnings Banner if both feeds down */}
+      {!isGlobalLiveData && !isVixLive && (
+        <div className="w-full bg-[#f0a500]/10 border-b border-[#f0a500]/40 p-2 text-center text-[10px] font-mono text-[#f0a500] font-bold animate-pulse">
+          ⚠ Global data feeds unavailable — Macro layer running on fallback values. Alert quality reduced.
+        </div>
+      )}
 
       {/* 2. Platform Branding Header */}
       <div className="w-full bg-[#050508] border-b border-[#21262d] p-3 px-4 flex flex-col md:flex-row items-center justify-between font-mono gap-3">

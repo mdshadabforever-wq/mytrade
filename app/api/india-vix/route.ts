@@ -23,6 +23,10 @@ export async function GET() {
     // 2. Fetch live VIX quote
     const quote = await fetchYFinanceQuote('^INDIAVIX');
 
+    if (!quote) {
+      throw new Error('VIX quote returned null');
+    }
+
     let level: 'LOW' | 'NORMAL' | 'HIGH' | 'EXTREME' = 'NORMAL';
     if (quote.price < 13) level = 'LOW';
     else if (quote.price > 30) level = 'EXTREME';

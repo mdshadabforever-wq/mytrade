@@ -32,6 +32,7 @@ export function calculateConfluence(data: {
     giftNiftyGap: number;
     alignedIndicesCount: number; // count of global indices trending same direction
     globalBias: 'BULLISH' | 'BEARISH' | 'MIXED';
+    isLiveData?: boolean;
   };
   // Layer 2: Institutional (FII/DII net flows) - Weight 25
   institutional: {
@@ -46,6 +47,7 @@ export function calculateConfluence(data: {
     vix: number;
     isPriceAboveMaxPain: boolean;
     isObSupporting: boolean;
+    vixLive?: boolean;
   };
   // Layer 4: Structure (SMC Signals) - Weight 20
   structure: {
@@ -80,7 +82,9 @@ export function calculateConfluence(data: {
     timeOfDayMinutes: data.risk.timeOfDayMinutes,
     isHighImpactEventToday: data.risk.isHighImpactEventToday,
     isHolidayTomorrow: data.risk.isHolidayTomorrow,
-    volumePercentOfAverage: data.risk.volumePercentOfAverage
+    volumePercentOfAverage: data.risk.volumePercentOfAverage,
+    globalIndicesLive: data.macro.isLiveData,
+    vixLive: data.options.vixLive
   });
 
   const isBlocked = noTradeStatus.isNoTradeDay;
@@ -107,7 +111,11 @@ export function calculateConfluence(data: {
   let macroSignal: LayerScore['signal'] = 'NEUTRAL';
   let macroReason = 'Mixed global macro triggers.';
   
-  if (data.macro.alignedIndicesCount >= 3) {
+  if (data.macro.isLiveData === false) {
+    macroScore = 10;
+    macroSignal = 'NEUTRAL';
+    macroReason = 'Live data unavailable — macro layer neutralized';
+  } else if (data.macro.alignedIndicesCount >= 3) {
     macroScore = 20;
     macroSignal = data.macro.globalBias === 'BULLISH' ? 'BULL' : 'BEAR';
     macroReason = `Strong global correlation: ${data.macro.alignedIndicesCount} indices aligned ${data.macro.globalBias}.`;
@@ -194,6 +202,11 @@ export function calculateConfluence(data: {
   } else if (total >= 60) {
     grade = 'A';
   } else {
+    grade = 'B';
+  }
+
+  // Cap grade at B if both global indices and vix are down/mock
+  if (data.macro.isLiveData === false && data.options.vixLive === false && grade !== 'NO_TRADE') {
     grade = 'B';
   }
 

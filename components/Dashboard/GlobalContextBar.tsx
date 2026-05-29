@@ -37,6 +37,13 @@ export function GlobalContextBar({ data }: GlobalContextBarProps) {
     );
   };
 
+  const renderStatusIndicator = (status?: string) => {
+    if (status === 'LIVE') return <span className="text-[10px] ml-1">🟢</span>;
+    if (status === 'DELAYED') return <span className="text-[10px] ml-1">🟡</span>;
+    if (status === 'MOCK') return <span className="text-[10px] ml-1">🔴</span>;
+    return null;
+  };
+
   return (
     <div className="sticky top-0 z-40 w-full bg-[#050508] border-b border-[#21262d] select-none text-[11px] font-mono">
       {/* ROW 1: Macro Stock Cues & Commodities */}
@@ -70,6 +77,7 @@ export function GlobalContextBar({ data }: GlobalContextBarProps) {
               {globalCues.dow.changePercent >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
               {globalCues.dow.changePercent.toFixed(2)}%
             </span>
+            {renderStatusIndicator(globalCues.dow.status)}
           </div>
           {renderTooltip('dow', `US markets standard benchmark close. Indicates general overnight risk sentiment.`)}
         </div>
@@ -87,6 +95,7 @@ export function GlobalContextBar({ data }: GlobalContextBarProps) {
               {globalCues.nasdaq.changePercent >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
               {globalCues.nasdaq.changePercent.toFixed(2)}%
             </span>
+            {renderStatusIndicator(globalCues.nasdaq.status)}
           </div>
           {renderTooltip('nasdaq', `US tech index close. Drives Indian IT stock flows (TCS, Infosys, Wipro).`)}
         </div>
@@ -104,6 +113,7 @@ export function GlobalContextBar({ data }: GlobalContextBarProps) {
               {globalCues.nikkei.changePercent >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
               {globalCues.nikkei.changePercent.toFixed(2)}%
             </span>
+            {renderStatusIndicator(globalCues.nikkei.status)}
           </div>
           {renderTooltip('nikkei', `Japan's stock index. Primary early morning Asian macro cue.`)}
         </div>
@@ -121,6 +131,7 @@ export function GlobalContextBar({ data }: GlobalContextBarProps) {
               {commodities.crude.changePercent <= 0 ? <ArrowDownRight className="w-3 h-3" /> : <ArrowUpRight className="w-3 h-3" />}
               {commodities.crude.changePercent.toFixed(2)}%
             </span>
+            {renderStatusIndicator(commodities.crude.status)}
           </div>
           {renderTooltip('crude', `Brent crude prices. Lower is bullish for India (import-dependent economy).`)}
         </div>
@@ -137,6 +148,7 @@ export function GlobalContextBar({ data }: GlobalContextBarProps) {
             <span className={commodities.usdinr.change <= 0 ? 'text-[#00e5a0]' : 'text-[#ff3a3a]'}>
               {commodities.usdinr.change >= 0 ? '+' : ''}{commodities.usdinr.change.toFixed(2)}
             </span>
+            {renderStatusIndicator(commodities.usdinr.status)}
           </div>
           {renderTooltip('usdinr', `US Dollar to Indian Rupee. Rising rates trigger FII outflows from domestic equities.`)}
         </div>
